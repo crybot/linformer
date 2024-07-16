@@ -1,0 +1,22 @@
+#TODO: JUPYTER arg
+
+FROM nvcr.io/nvidia/pytorch:23.12-py3
+ARG WANDB_SECRET
+RUN apt-get update -y && apt-get install git -y
+RUN pip install pandas numpy pkbar einops jupyterlab pathos
+RUN test -n "$WANDB_SECRET" # makes WANDB_SECRET mandatory for the build
+RUN pip install --upgrade wandb && \
+    wandb login $WANDB_SECRET
+
+WORKDIR /root
+RUN mkdir -p ./HLT
+COPY ./datasets ./HLT/datasets
+
+COPY ./src ./HLT/src
+RUN chmod +x ./HLT/src/main.py
+RUN mkdir -p ./HLT/artifacts
+
+CMD ["python3", "./HLT/src/main.py"]
+
+# CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
+# ENTRYPOINT ["tail", "-f", "/dev/null"]
