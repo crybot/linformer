@@ -7,6 +7,7 @@ RUN pip install pandas numpy pkbar einops jupyterlab pathos
 RUN test -n "$WANDB_SECRET" # makes WANDB_SECRET mandatory for the build
 RUN pip install --upgrade wandb && \
     wandb login $WANDB_SECRET
+RUN pip install pytorch-transformers tqdm boto3 requests regex sentencepiece sacremoses
 
 WORKDIR /root
 RUN mkdir -p ./HLT
