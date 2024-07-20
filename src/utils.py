@@ -20,3 +20,5 @@ def print_summary(model, print_model=False):
     if print_model:
         print(model)
         print(f'Number of parameters: {params_count(model)}')
+
+

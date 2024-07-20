@@ -1,7 +1,8 @@
 #!/bin/bash
 
 declare -a FILES_LM=(
-"model.safetensors"
+# "model.safetensors"
+"pytorch_model.bin"
 "config.json"
 "generation_config.json"
 "merges.txt"
@@ -11,7 +12,12 @@ declare -a FILES_LM=(
 "generation_config_for_summarization.json"
 )
 
-declare -a MODELS=( "openai-community/gpt2" "facebook/bart-base" "facebook/bart-large-cnn" )
+declare -a MODELS=(
+"openai-community/gpt2"
+"facebook/bart-base"
+"facebook/bart-large"
+"facebook/bart-large-cnn"
+)
 
 function validate_url(){
   if [[ `wget -S --spider $1  2>&1 | grep 'HTTP/1.1 200 OK'` ]]; then echo "true"; fi
@@ -34,7 +40,7 @@ for model in "${MODELS[@]}"; do
     # model (most likely it's not needed)
     URL="${PREFIX}/${model}/resolve/main/${file}"
     if [ ! `validate_url "$URL"` ]; then
-      echo "File not hosted on HuggingFace, skipping."
+      echo "File not hosted on HuggingFace: ${URL}, skipping."
       continue
     fi
 

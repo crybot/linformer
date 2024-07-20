@@ -7,15 +7,23 @@ RUN pip install pandas numpy pkbar einops jupyterlab pathos
 RUN test -n "$WANDB_SECRET" # makes WANDB_SECRET mandatory for the build
 RUN pip install --upgrade wandb && \
     wandb login $WANDB_SECRET
-RUN pip install pytorch-transformers tqdm boto3 requests regex sentencepiece sacremoses
+RUN pip install transformers tqdm boto3 requests regex sentencepiece sacremoses
+RUN pip install accelerate
+RUN pip install bitsandbytes
+RUN apt-get install -y git-lfs
+
 
 WORKDIR /root
 RUN mkdir -p ./HLT
+
+COPY ./models ./HLT/models
 COPY ./datasets ./HLT/datasets
+
 
 COPY ./src ./HLT/src
 RUN chmod +x ./HLT/src/main.py
 RUN mkdir -p ./HLT/artifacts
+
 
 CMD ["python3", "./HLT/src/main.py"]
 

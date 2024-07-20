@@ -9,7 +9,8 @@ from text.tokenizers import Tokenizer
 
 class CSVDataset(Dataset):
     """
-    Construct a torch.utils.data.Dataset from a CSV file
+    Construct a torch.utils.data.Dataset from a CSV file with its entries possibly
+    tokenized.
     """
     def __init__(self, csv_path: str, text_key: str, features_keys: list[str] = [], tokenizer: Tokenizer = None) -> None:
         df = pd.read_csv(csv_path)
