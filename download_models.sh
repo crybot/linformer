@@ -17,6 +17,7 @@ declare -a MODELS=(
 "facebook/bart-base"
 "facebook/bart-large"
 "facebook/bart-large-cnn"
+"google-bert/bert-large-uncased"
 )
 
 function validate_url(){
