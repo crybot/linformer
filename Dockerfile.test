@@ -1,0 +1,19 @@
+FROM nvcr.io/nvidia/pytorch:23.12-py3
+RUN pip install pandas numpy pkbar einops jupyterlab pathos
+RUN pip install transformers tqdm boto3 requests regex sentencepiece sacremoses
+RUN pip install accelerate
+RUN pip install bitsandbytes
+
+WORKDIR /root
+
+COPY ./models ./models
+COPY ./datasets ./datasets
+COPY ./src ./src
+COPY ./.pythonrc.py /root/.pythonrc.py
+
+ENV PYTHONSTARTUP=/root/.pythonrc.py
+RUN mkdir -p /mnt/history
+WORKDIR ./src
+
+CMD ["python3"]
+
