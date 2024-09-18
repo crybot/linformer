@@ -13,12 +13,6 @@ from tokenizers import Tokenizer
 
 # TODO: remove asserts and raise exceptions
 
-# TODO: shift decoder's inputs (target sequence) to the right by preprending
-# BOS token. Can implement a Shift module to be used as part of a data pipeline.
-# Example - Dataset entry : <s> A B C D E </s>
-#           Target        :  A  B C D E </s>
-#           Decoder input : <s> A B C D E
-
 # TODO: torch.compile before training to improve performance
 
 # NOTE: padding can be done on the left or right of each sequence. LLMs (which
@@ -42,6 +36,8 @@ from tokenizers import Tokenizer
 
 # TODO: possibly integrate loss calculation within task heads (such as
 # LanguageModelingHead)
+
+# TODO: define and annotate class parameters
 
 def is_initializable(module: nn.Module) -> bool:
     return isinstance(module, tuple([nn.Linear, nn.LayerNorm]))
@@ -331,17 +327,23 @@ class NLPTransformer(Transformer):
         if not self.embedding:
             self.embedding = nn.Embedding(self.tokenizer.vocab_size, self.dim)
 
-    def forward(self, enc_in, dec_in, device='cpu'):
-
+    def forward(self, src, tgt, device='cpu'):
         # Tokenization
-        tokenized_enc = self.tokenizer(enc_in, padding = self.padding)
-        tokenized_dec = self.tokenizer(dec_in, padding = self.padding)
-        enc_in = torch.tensor(tokenized_enc['input_ids'], device=device)
-        dec_in = torch.tensor(tokenized_dec['input_ids'], device=device)
+        tokenized_src = self.tokenizer(src, padding = self.padding)
+        tokenized_tgt = self.tokenizer(tgt, padding = self.padding)
+        enc_in = torch.tensor(tokenized_src['input_ids'], device=device)
+
+        # Tokenization encloses the token ids with <s> ... </s>. To produce the
+        # input to the decoder it's sufficient to drop the last token.
+        # The target sequence is computed by dropping only the first token.
+        dec_in = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., :-1] # Drop last 
+        dec_tgt = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., 1:] # Drop first # TODO
 
         # Padding masks
-        enc_mask = torch.tensor(tokenized_enc['attention_mask'], device=device)
-        dec_mask = torch.tensor(tokenized_dec['attention_mask'], device=device)
+        enc_mask = torch.tensor(tokenized_src['attention_mask'], device=device)
+        dec_mask = torch.tensor(tokenized_tgt['attention_mask'], device=device)[..., :-1] # Drop last
+
+        # TODO: compute tgt_mask for loss
 
         # Embedding
         enc_in = self.embedding(enc_in)
@@ -350,8 +352,10 @@ class NLPTransformer(Transformer):
         # Positional encoding
         enc_in = self.pos_encoding(enc_in)
         dec_in = self.pos_encoding(dec_in)
+        
+        pred = super().forward(enc_in, dec_in, enc_mask = enc_mask, dec_mask = dec_mask)
 
-        return super().forward(enc_in, dec_in, enc_mask = enc_mask, dec_mask = dec_mask)
+        return pred
 
 class PointwiseClassificationHead(nn.Module):
     def __init__(
@@ -376,10 +380,28 @@ class PointwiseClassificationHead(nn.Module):
             out = torch.softmax(out, dim=-1)
         return out
 
+# TODO: create basic record type for the returned object
 class LanguageModelingHead(PointwiseClassificationHead):
     def __init__(
             self,
-            model: NLPTransformer
+            model: NLPTransformer,
+            loss_fn: nn.Module = None,
             ) -> None:
         super().__init__(model, model.dim, model.tokenizer.vocab_size)
+        # self.loss_fn = loss_fn
+        # self.loss = -100.0
+
+        # if not self.loss_fn:
+        #     self.loss_fn = nn.NLLLoss(reduction='none')
+
+    def forward(self, src, tgt, *args, **kwargs):
+        out = super().forward(src, tgt, *args, **kwargs)
+        # if compute_loss:
+        #     pred = out[0].view(-1, self.classes)
+        #     target = out[1].view(-1)
+        #     self.loss = self.loss_fn(pred, target)
+
+        return out
+        
+
 
