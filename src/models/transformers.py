@@ -13,8 +13,6 @@ from tokenizers import Tokenizer
 
 # TODO: remove asserts and raise exceptions
 
-# TODO: Task-specific heads (e.g. Linear + softmax for LM)
-
 # TODO: shift decoder's inputs (target sequence) to the right by preprending
 # BOS token. Can implement a Shift module to be used as part of a data pipeline.
 # Example - Dataset entry : <s> A B C D E </s>
@@ -41,6 +39,9 @@ from tokenizers import Tokenizer
 # encoder's output. Possibly, we could just use TransformerEncoder as a mean of
 # constructing decoder-olny architectures, by passing an `is_causal` argument
 # to it.
+
+# TODO: possibly integrate loss calculation within task heads (such as
+# LanguageModelingHead)
 
 def is_initializable(module: nn.Module) -> bool:
     return isinstance(module, tuple([nn.Linear, nn.LayerNorm]))
@@ -311,7 +312,6 @@ class TransformerDecoderLayer(nn.Module):
         return dec_out
 
 
-# TODO: annotate types (tokenizer?)
 class NLPTransformer(Transformer):
     def __init__(
             self,
@@ -352,4 +352,29 @@ class NLPTransformer(Transformer):
         dec_in = self.pos_encoding(dec_in)
 
         return super().forward(enc_in, dec_in, enc_mask = enc_mask, dec_mask = dec_mask)
+
+class PointwiseClassificationHead(nn.Module):
+    def __init__(
+            self,
+            model: nn.Module,
+            in_dim: int,
+            classes: int
+            ) -> None:
+        super().__init__()
+        self.model = model
+        self.classes = classes
+        self.linear = nn.Linear(in_dim, classes)
+
+    def forward(self, *args, **kwargs) -> Tensor:
+        out = self.model(*args, **kwargs) # (B, N, D)
+        out = self.linear(out) # (B, N, C)
+        out = torch.softmax(out, dim=-1) # Broadcasted along (B, N) dimensions
+        return out
+
+class LanguageModelingHead(PointwiseClassificationHead):
+    def __init__(
+            self,
+            model: NLPTransformer
+            ) -> None:
+        super().__init__(model, model.dim, model.tokenizer.vocab_size)
 
