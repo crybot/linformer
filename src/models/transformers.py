@@ -365,10 +365,15 @@ class PointwiseClassificationHead(nn.Module):
         self.classes = classes
         self.linear = nn.Linear(in_dim, classes)
 
-    def forward(self, *args, **kwargs) -> Tensor:
+    def forward(self, *args, log: bool = False, **kwargs) -> Tensor:
         out = self.model(*args, **kwargs) # (B, N, D)
         out = self.linear(out) # (B, N, C)
-        out = torch.softmax(out, dim=-1) # Broadcasted along (B, N) dimensions
+
+        # Broadcasted along (B, N) dimensions
+        if log:
+            out = torch.log_softmax(out, dim=-1)
+        else:
+            out = torch.softmax(out, dim=-1)
         return out
 
 class LanguageModelingHead(PointwiseClassificationHead):
