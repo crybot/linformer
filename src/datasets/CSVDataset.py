@@ -6,7 +6,6 @@ from text.tokenizers import Tokenizer
 # from pytorch_transformers.tokenization_utils import PretrainedTokenizer
 # TODO correct type annotation for Tokenizer
 
-
 class CSVDataset(Dataset):
     """
     Construct a torch.utils.data.Dataset from a CSV file with its entries possibly
@@ -20,14 +19,10 @@ class CSVDataset(Dataset):
             self.dataset = [tokenizer(text, padding='max_length', max_length = 512, truncation=True,
                 return_tensors="pt") for text in df['text']]
         else:
-            self.dataset = [text for text in df['text']]
+            self.dataset = [text for text in df[text_key]]
 
     def __len__(self) -> int:
         return len(self.dataset)
 
     def __getitem__(self, idx) -> Tensor:
         return self.dataset[idx]
-
-
-
-
