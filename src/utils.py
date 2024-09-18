@@ -10,8 +10,8 @@ def set_random_state(seed):
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
-    torch.backends.cudnn.benchmark = False
-    torch.use_deterministic_algorithms(True)
+    # torch.backends.cudnn.benchmark = False
+    # torch.use_deterministic_algorithms(True)
 
 def params_count(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)

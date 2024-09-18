@@ -1,4 +1,3 @@
-#!/usr/bin/python3
 import numpy as np
 import pandas as pd
 import math
@@ -10,7 +9,7 @@ from transformers import AutoModelForCausalLM
 from transformers import AutoModelForSeq2SeqLM
 from transformers import AutoModelForMaskedLM
 from transformers import AutoTokenizer
-from text.utils import random_mask, random_extract, mask_fill
+from text.utils import random_mask, random_text_extract, mask_fill
 
 
 def main():
@@ -35,37 +34,61 @@ def main():
 
     # Pretrained LM with frozen weights
     fpt_lm = AutoModelForMaskedLM.from_pretrained(
-            "./HLT/models/facebook/bart-large",
-            forced_bos_token_id=0
+            "./HLT/models/facebook/bart-large"
             ).to(device)
 
-    # can share tokenizer between pt_lm and fpt_lm
+    # Can share tokenizer between pt_lm and fpt_lm
+    # Note: Bart uses absolute positional encoding, so it is advisable to pad
+    # on the right
     tokenizer = AutoTokenizer.from_pretrained("./HLT/models/facebook/bart-large-cnn", padding_side="right")
 
     sentences = ["What do you think are the main reasons we exist in this world?", "Hello this is just a simple sentence.", "Oh no, another sentence"]
-    input_ids = tokenizer(sentences, return_tensors="pt", padding=True)["input_ids"].to(device)
+    inputs = tokenizer(sentences, return_tensors="pt", padding=True)
+    input_ids = inputs["input_ids"].to(device)
     masked_ids, masked_index = random_mask(input_ids, tokenizer.mask_token_id, mask_p=0.2, pad_token_id=tokenizer.pad_token_id)
 
-    print(f'Original sentences:')
-    for i, s in enumerate(sentences):
-        print(f'Sentence {i+1}: {s}')
+    masked_index = (masked_ids == tokenizer.mask_token_id)
+    # labels = -torch.ones_like(input_ids) * 100 # compute loss only on the masked tokens
+    # labels[masked_index] = input_ids[masked_index].clone()
+    labels = input_ids.clone()
+    labels[~masked_index] = -100
 
-    masked_decoded = tokenizer.batch_decode(
-            masked_ids,
-            skip_special_tokens=False,
-            clean_up_tokenization_spaces=False
-            )
+    labels.to(device)
+    inputs["labels"] = labels
 
-    print(f'Masked sentences:')
-    for i, s in enumerate(masked_decoded):
-        print(f'Sentence {i+1}: {s}')
+    inputs = {key: val.to(device) for key, val in inputs.items()}
 
-    predictions = mask_fill(fpt_lm, masked_ids, masked_index, top_k = 5)
+    pt_lm.train()
 
-    for i, pred in enumerate(predictions):
-        print(f'Sentence {i+1} predictions: {[tokenizer.batch_decode(p) for p in pred]}')
+    outputs = pt_lm(**inputs)
+    loss = outputs.loss
+
+    print(f"Loss: {loss.item()}")
+
+
+    
+
+    # print(f'Original sentences:')
+    # for i, s in enumerate(sentences):
+    #     print(f'Sentence {i+1}: {s}')
+
+    # masked_decoded = tokenizer.batch_decode(
+    #         masked_ids,
+    #         skip_special_tokens=False,
+    #         clean_up_tokenization_spaces=False
+    #         )
+
+    # print(f'Masked sentences:')
+    # for i, s in enumerate(masked_decoded):
+    #     print(f'Sentence {i+1}: {s}')
+
+    # predictions = mask_fill(fpt_lm, masked_ids, masked_index, top_k = 5)
+
+    # for i, pred in enumerate(predictions):
+    #     print(f'Sentence {i+1} predictions: {[tokenizer.batch_decode(p) for p in pred]}')
 
     ############################
+
 
     print('Done')
 

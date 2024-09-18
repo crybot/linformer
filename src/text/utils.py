@@ -1,6 +1,7 @@
 import torch
 from torch import Tensor
 from typing import Union
+import numpy as np
 
 def pad_positions(tokens: Tensor, pad_token_id: int) -> tuple[Tensor]:
     """ 
@@ -9,11 +10,62 @@ def pad_positions(tokens: Tensor, pad_token_id: int) -> tuple[Tensor]:
     """
     return (tokens == pad_token_id).nonzero(as_tuple=True)
 
-def random_extract(text: str, max_periods: int = 3, max_length: int = 150) -> list[str]:
+# TODO: allow contigous periods extraction (need to split tokens on period_token_id)
+# TODO: resample extracts of size <= min_size (size=1 produces nans)
+def random_tokens_extract(
+        tokens: Tensor,
+        max_length: int = 150
+        ) -> Tensor:
     """
-    Return a random extract of the original input text.
+    Return a random contigous extract of the input tokens.
     """
-    pass
+    start_idx = np.random.choice(tokens.shape[-1], replace=False)
+
+    # TODO: sample different location for each batch element
+
+    return tokens[:, start_idx : start_idx + max_length]
+
+def random_text_extract(
+        text: str,
+        max_periods: int = 3,
+        max_length: int = 150,
+        max_retries: int = 3
+        ) -> list[str]:
+    """
+    Return a random contigous extract of the original input text.
+    """
+    periods = text.split('.')
+
+    retries = 0
+
+    while retries < max_retries:
+        start_idx = np.random.choice(len(periods), replace=False)
+        start = periods[start_idx]
+        period_length = len(start.split())
+        retries += 1
+
+        if period_length <= max_length:
+            break
+
+    if period_length > max_length and retries == max_retries:
+        raise Error(f"Could not find a period shorter than {max_length} words")
+
+    total_length = period_length
+    extract = [start]
+    period_idx = start_idx + 1
+
+    while len(extract) < max_periods and period_idx < len(periods):
+        next_period = periods[period_idx]
+        period_length = len(next_period.split())
+
+        if total_length + period_length <= max_length:
+            extract.append(next_period)
+            total_length += period_length
+            period_idx += 1
+        else:
+            break
+
+    return ' '.join(extract)
 
 """
 Note: We apply random_mask to already tokenized sentences because otherwise
@@ -27,7 +79,8 @@ def random_mask(
         ignore_first = True,
         ignore_last = True,
         ignore_padding = True,
-        pad_token_id = None
+        pad_token_id = None,
+        return_mask = False
         ) -> tuple[Tensor, Tensor]:
     """
     Randomly mask a subset of the input tokens.
@@ -42,22 +95,27 @@ def random_mask(
     assert tokens.dim() in [1, 2]
 
     masked = torch.clone(tokens)
-    mask_positions = torch.bernoulli(torch.ones_like(tokens) * mask_p)
+    mask_positions = torch.bernoulli(torch.ones_like(tokens) * mask_p).bool()
     # Do not mask first token of each sentence
-    mask_positions[..., 0] *= int(not ignore_first)
+    mask_positions[..., 0] *= not ignore_first
     # Do not mask last token of each sentence (if there is no pad)
-    mask_positions[..., -1] *= int(not ignore_last)
+    mask_positions[..., -1] *= not ignore_last
 
     # Retrieve pad positions over sentences (returns a tuple of tensors for each dim)
-    pad_index = pad_positions(tokens, pad_token_id)
-    (*batch_idx, seq_idx) = pad_index
-    # Do not mask <pad> tokens
-    mask_positions[pad_index] *= int(not ignore_padding)
-    # Do not mask last token before <pad> (i.e. </s>)
-    mask_positions[(*batch_idx, seq_idx - 1)] *= int(not ignore_padding)
+    if ignore_padding:
+        assert pad_token_id is not None
+        pad_index = pad_positions(tokens, pad_token_id)
+        (*batch_idx, seq_idx) = pad_index
+        # Do not mask <pad> tokens
+        mask_positions[pad_index] = False
+        # Do not mask last token before <pad> (i.e. </s>)
+        mask_positions[(*batch_idx, seq_idx - 1)] = False
 
     # Apply mask
-    masked[mask_positions == 1.0] = mask_token_id
+    masked[mask_positions] = mask_token_id
+
+    if return_mask:
+        return masked, mask_positions
 
     return masked, mask_positions.nonzero(as_tuple=False)
 
