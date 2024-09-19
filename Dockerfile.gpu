@@ -29,7 +29,8 @@ RUN mkdir -p ./HLT/artifacts
 # CMD ["python3", "./HLT/src/main.py"]
 # CMD ["python3", "./HLT/src/summarizer_test.py"]
 # CMD ["python3", "./HLT/src/generation_test.py"]
-CMD ["python3", "./HLT/src/ste_test.py"]
+# CMD ["python3", "./HLT/src/ste_test.py"]
+CMD ["python3", "./HLT/src/train_mt.py"]
 
 # CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
 # ENTRYPOINT ["tail", "-f", "/dev/null"]
