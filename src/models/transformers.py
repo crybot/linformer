@@ -9,6 +9,10 @@ from tokenizers import Tokenizer
 
 # TODO: Dataset, batching and training
 
+# TODO: Since we pretokenize the whole dataset with padding='longest', to save
+# some computatation we can truncate the sequences within each batch to the
+# length of the sequence with fewer pad tokens.
+
 # TODO: pipeline for data processing
 
 # TODO: remove asserts and raise exceptions
@@ -142,12 +146,15 @@ class MultiHeadAttention(nn.Module):
         # We do not assume, in general, that masked positions appear on the
         # sides. There might be reasons to mask tokens within the boundaries of
         # a sequence: for example, sparse attention, etc.
+        # NOTE: using -inf as fill value breaks the optimizer
+
+        # fill_value = float('-inf')
+        fill_value = torch.finfo(attn.dtype).min
         if key_mask is not None:
 
             assert key_mask.shape[1] == key.shape[1] # must match sequence length
             assert query_mask.shape[1] == query.shape[1] # must match sequence length
 
-            # attention_mask = torch.full((n, n), float('-inf'), device=query.device)
             assert key_mask is not None and query_mask is not None
 
             if key_mask.dtype is not torch.bool:
@@ -170,7 +177,7 @@ class MultiHeadAttention(nn.Module):
             # transpose of the first one. By 'logically-and' them together we
             # obtain the correct mask for each sequence in the batch
             mask = key_mask & query_mask.transpose(1, 2)
-            mask = torch.where(~mask, float('-inf'), 0.0)
+            mask = torch.where(~mask, fill_value, 0.0)
 
             # Add new 'heads' dimension for broadcasting -> (B, 1, N, N)
             # the attention matrix is (B, H, N, N) so the mask is broadcasted H
@@ -185,20 +192,22 @@ class MultiHeadAttention(nn.Module):
             # attention mask for this since it's shared among every sequence
             # (because of padding they all have the same length)
             n = query.shape[1]
-            causal_mask = torch.full((n, n), float('-inf'), device=query.device).triu(diagonal=1)
+            causal_mask = torch.full((n, n), fill_value, device=query.device).triu(diagonal=1)
             attn = attn + causal_mask
 
         # Row softmax
         attn = torch.softmax(attn, dim = -1)
+
         # Hack to prevent softmax from producing `nan`s when entire rows of the
         # activation matrix are "masked" with -inf. This should be better
         # approached with MaskedTensors, but they are still a propotype
         # feature. An alternative approach would be to use
-        # torch.finf(attn.dtype).min as filling value instead of -inf, but this
+        # torch.finfo(attn.dtype).min as filling value instead of -inf, but this
         # would produce a uniform distribution instead of all zeros. These
         # values are not considered during computation due to column masking,
         # but they might interfere during the last projections.
-        attn = torch.nan_to_num(attn, 0.0)
+        # NOTE: disabled because it hindered optimization
+        # attn = torch.nan_to_num(attn, 0.0)
 
         # Value multiplication
         attn = torch.matmul(attn, v)
@@ -211,7 +220,6 @@ class MultiHeadAttention(nn.Module):
             attn = self.out_proj(attn)
 
         assert attn.shape[-1] == self.dim
-
         return attn
 
 class Transformer(nn.Module):
@@ -311,10 +319,11 @@ class TransformerDecoderLayer(nn.Module):
 class NLPTransformer(Transformer):
     def __init__(
             self,
-            tokenizer: Tokenizer,
             *args,
             pos_encoding: nn.Module = SinPosEncoding(),
             embedding: nn.Module = None,
+            tokenizer: Tokenizer = None,
+            vocab_size: int = None,
             padding: bool = True,
             **kwargs
             ) -> None:
@@ -323,27 +332,40 @@ class NLPTransformer(Transformer):
         self.pos_encoding = pos_encoding
         self.embedding = embedding
         self.padding = padding
+        self.vocab_size = vocab_size
+
+        # TODO: if tokenizer is None ??
+        if not self.vocab_size:
+            self.vocab_size = self.tokenizer.vocab_size
 
         if not self.embedding:
-            self.embedding = nn.Embedding(self.tokenizer.vocab_size, self.dim)
+            self.embedding = nn.Embedding(self.vocab_size, self.dim)
 
-    def forward(self, src, tgt, device='cpu'):
+    def forward(self, src, tgt, src_mask = None, tgt_mask = None, device='cpu'):
         # Tokenization
-        tokenized_src = self.tokenizer(src, padding = self.padding)
-        tokenized_tgt = self.tokenizer(tgt, padding = self.padding)
-        enc_in = torch.tensor(tokenized_src['input_ids'], device=device)
+        if self.tokenizer:
+            # TODO: return_tensors='pt': how to allocate them on device?
+            tokenized_src = self.tokenizer(src, padding = self.padding)
+            tokenized_tgt = self.tokenizer(tgt, padding = self.padding)
+            enc_in = torch.tensor(tokenized_src['input_ids'], device=device)
 
-        # Tokenization encloses the token ids with <s> ... </s>. To produce the
-        # input to the decoder it's sufficient to drop the last token.
-        # The target sequence is computed by dropping only the first token.
-        dec_in = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., :-1] # Drop last 
-        dec_tgt = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., 1:] # Drop first # TODO
+            # Tokenization encloses the token ids with <s> ... </s>. To produce the
+            # input to the decoder it's sufficient to drop the last token.
+            # The target sequence is computed by dropping only the first token.
+            dec_in = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., :-1] # Drop last 
+            dec_tgt = torch.tensor(tokenized_tgt['input_ids'], device=device)[..., 1:] # Drop first # TODO
 
-        # Padding masks
-        enc_mask = torch.tensor(tokenized_src['attention_mask'], device=device)
-        dec_mask = torch.tensor(tokenized_tgt['attention_mask'], device=device)[..., :-1] # Drop last
+            # Padding masks
+            enc_mask = torch.tensor(tokenized_src['attention_mask'], device=device)
+            dec_mask = torch.tensor(tokenized_tgt['attention_mask'], device=device)[..., :-1] # Drop last
+            # TODO: compute tgt_mask for loss
 
-        # TODO: compute tgt_mask for loss
+        # Already tokenized: preparing inputs and masks
+        else:
+            enc_in = src
+            dec_in = tgt[..., :-1]
+            if tgt_mask is not None:
+                tgt_mask = tgt_mask[..., :-1] # TODO
 
         # Embedding
         enc_in = self.embedding(enc_in)
@@ -353,7 +375,7 @@ class NLPTransformer(Transformer):
         enc_in = self.pos_encoding(enc_in)
         dec_in = self.pos_encoding(dec_in)
         
-        pred = super().forward(enc_in, dec_in, enc_mask = enc_mask, dec_mask = dec_mask)
+        pred = super().forward(enc_in, dec_in, enc_mask = src_mask, dec_mask = tgt_mask)
 
         return pred
 
@@ -387,7 +409,7 @@ class LanguageModelingHead(PointwiseClassificationHead):
             model: NLPTransformer,
             loss_fn: nn.Module = None,
             ) -> None:
-        super().__init__(model, model.dim, model.tokenizer.vocab_size)
+        super().__init__(model, model.dim, model.vocab_size)
         # self.loss_fn = loss_fn
         # self.loss = -100.0
 
@@ -403,5 +425,3 @@ class LanguageModelingHead(PointwiseClassificationHead):
 
         return out
         
-
-
