@@ -13,12 +13,12 @@ def sinusoidal_pos_encoding(x: Tensor) -> Tensor:
     dim = x.shape[-1]
     n = x.shape[-2]
 
-    pos = torch.arange(n).unsqueeze(1)
-    i = torch.arange(dim)
+    pos = torch.arange(n, device=x.device).unsqueeze(1)
+    i = torch.arange(dim, device=x.device)
     i_even = i % 2 == 0
     i_odd = ~i_even
 
-    pe = torch.empty(x.shape[1:])
+    pe = torch.empty(x.shape[1:], device=x.device)
     pe[:, i_even] = torch.sin(pos / 10000**(i[i_even] / dim))
     pe[:, i_odd] = torch.cos(pos / 10000**((i[i_odd] - 1) / dim))
     return pe
