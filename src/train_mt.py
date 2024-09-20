@@ -18,7 +18,7 @@ from utils import to_device
 def multiple_eight(n: int) -> int:
     return (n + 7) // 8 * 8
 
-def max_non_padded_length(sequence: Tensor, pad_token = 1) -> int:
+def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> int:
     non_padded_mask = sequence != pad_token
     # Sum along the sequence dimension (N) to count non-padding tokens for each sequence
     lengths = non_padded_mask.sum(dim=1)
@@ -26,10 +26,10 @@ def max_non_padded_length(sequence: Tensor, pad_token = 1) -> int:
     # Find the maximum length in the batch
     return lengths.max().item()
 
-def trim_batch_pad_tokens(inputs: tuple[Tensor]) -> Tensor:
+def trim_batch_pad_tokens(inputs: tuple[Tensor], pad_token: int = 1) -> Tensor:
     src, tgt, src_mask, tgt_mask = inputs
-    max_src_length = max_non_padded_length(src)
-    max_tgt_length = max_non_padded_length(tgt)
+    max_src_length = max_non_padded_length(src, pad_token = pad_token)
+    max_tgt_length = max_non_padded_length(tgt, pad_token = pad_token)
 
     src, src_mask = src[:, :max_src_length], src_mask[:, :max_src_length]
     tgt, tgt_mask = tgt[:, :max_tgt_length], tgt_mask[:, :max_tgt_length]
@@ -63,8 +63,9 @@ def encoder_decoder_inputs(src, tgt, src_mask, tgt_mask):
 
 
 class CustomTrainingLoop(TrainingLoop):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, pad_token_id: int = 1, **kwargs):
         super().__init__(*args, **kwargs)
+        self.pad_token_id = pad_token_id
 
     def preprocess_batch(
             self,
@@ -72,7 +73,7 @@ class CustomTrainingLoop(TrainingLoop):
             *args,
             **kwargs
             ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        return to_device(*trim_batch_pad_tokens(inputs), device=self.device)
+        return to_device(*trim_batch_pad_tokens(inputs, self.pad_token_id), device=self.device)
 
     def forward(
             self,
@@ -110,7 +111,7 @@ def main():
     model = LanguageModelingHead(transformer).to(device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
 
-    dataset = EncoderDecoderCSVDataset('./HLT/datasets/wmt14_translate_de-en_test.csv', src_key = 'en', tgt_key='de', tokenizer=tokenizer, device='cpu')
+    dataset = CSVDataset('./HLT/datasets/wmt14_translate_de-en_test.csv', src_key = 'en', tgt_key='de', tokenizer=tokenizer, device='cpu')
     opt = make_optimizer(torch.optim.Adam, lr=1e-4)
 
     training_loop = CustomTrainingLoop(
@@ -126,6 +127,7 @@ def main():
             shuffle = True,
             device = device,
             num_workers = 4,
+            pad_token_id = tokenizer.pad_token_id,
             val_metrics = {'perplexity': seq2seq_perplexity},
             callbacks = [
                 ProgressbarCallback(epochs=epochs, width=20)
