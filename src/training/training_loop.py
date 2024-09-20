@@ -55,6 +55,9 @@ class TrainingLoop():
         self.val_metrics = val_metrics
         self.device = device
         self.seed = 42
+
+        # Pytorch auto scaler for mixed precision training (no-ops if not enabled)
+        self.scaler = torch.GradScaler(self.device, enabled=self.mixed_precision)
         
         if not self.loss_arg_filter:
             self.loss_arg_filter = lambda x, pred, y: (pred, *y)
@@ -111,7 +114,7 @@ class TrainingLoop():
                 pin_memory=self.pin_memory,
                 num_workers=self.num_workers,
                 prefetch_factor=(self.num_workers*2 if self.num_workers > 0 else None),
-                persistent_workers=self.num_workers > 0)
+                persistent_workers=False)
         test_dl = dataloader_fn(test_ds,
                 batch_size=self.batch_size,
                 collate_fn=self._collate_fn,
@@ -120,6 +123,10 @@ class TrainingLoop():
                 num_workers=0)
 
         return train_dl, val_dl, test_dl
+
+    # TODO: type annotation: can accept anything in input I guess
+    def preprocess_batch(self, inputs, *args, **kwargs):
+        return inputs
 
     # TODO: forward should only return prediction and
     #       backward should only compute loss
@@ -133,16 +140,10 @@ class TrainingLoop():
         loss = self.loss_fn(*self.loss_arg_filter(X, pred, ys))
         return pred, loss
 
-    def backward(self, loss, scaler = None):
-        # Backpropagation
-        if self.mixed_precision:
-            scaler.scale(loss).backward()
-            scaler.step(self.optimizer)
-            scaler.update()
-        else:
-            loss.backward()
-            self.optimizer.step()
-
+    def backward(self, loss):
+        self.scaler.scale(loss).backward()
+        self.scaler.step(self.optimizer)
+        self.scaler.update()
 
     def _train(self, epochs):
         if self.train_dataloader is None or self.val_dataloader is None:
@@ -152,39 +153,29 @@ class TrainingLoop():
         self.update_state('batches', num_batches)
         
         self.on_train_start()
-
-        # Pytorch auto scaler for mixed precision training
-        # TODO: might become a field so that it does not have to be passed
-        # around
-        scaler = None
-        if self.mixed_precision:
-            scaler = torch.cuda.amp.GradScaler()
-
         initial_epoch = self.get_state('epoch', 1)
 
         for epoch in range(initial_epoch, initial_epoch + epochs):
             self.on_train_epoch_start(epoch)
 
             self.model.train()
-            # TODO: provide interface to more than one input
             for batch, inputs in enumerate(self.train_dataloader):
                 self.on_train_batch_start(batch)
 
-                # TODO: move into batch_start callback?
                 # Clear gradients
                 self.optimizer.zero_grad(set_to_none=True)
 
                 # Forward pass
-                with ExitStack() as stack:
-                    if self.mixed_precision:
-                        stack.enter_context(torch.cuda.amp.autocast())
+                with torch.autocast(device_type=self.device, enabled=self.mixed_precision):
+                    inputs = self.preprocess_batch(inputs)
+                    pred, loss = self.forward(inputs)
 
-                pred, loss = self.forward(inputs)
-                self.backward(loss, scaler)
-
+                # Backpropagation
+                self.backward(loss)
                 self.on_train_batch_end(batch, loss.detach())
 
-            val_loss, other_metrics = self._test(self.val_dataloader, self.val_metrics)
+            with torch.autocast(device_type=self.device, enabled=self.mixed_precision):
+                val_loss, other_metrics = self._test(self.val_dataloader, self.val_metrics)
             self.on_validation_end(val_loss, other_metrics)
             self.on_train_epoch_end(epoch)
 
@@ -197,18 +188,18 @@ class TrainingLoop():
         test_metrics = dict.fromkeys(metrics.keys(), 0.0)
         with torch.no_grad():
             for inputs in dataloader:
+                inputs = self.preprocess_batch(inputs)
                 pred, loss = self.forward(inputs)
                 test_loss += loss.detach()
 
                 for name, fn in metrics.items():
-                    # print(pred.shape)
-                    # print(inputs[1].shape)
                     test_metrics[name] += fn(pred, inputs).detach()
 
         test_loss /= num_batches
         test_metrics = {k: v / num_batches for k, v in test_metrics.items()}
         return test_loss, test_metrics
 
+    # TODO: refactor in terms of self.forward()
     def predict(self, data):
         """ Run inference over a set of datapoints,
             returning the predicted values.

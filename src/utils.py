@@ -21,4 +21,6 @@ def print_summary(model, print_model=False):
         print(model)
         print(f'Number of parameters: {params_count(model)}')
 
+def to_device(*tensors, device):
+    return tuple(tensor.to(device) for tensor in tensors)
 
