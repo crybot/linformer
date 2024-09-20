@@ -1,6 +1,6 @@
 #TODO: JUPYTER arg
 
-FROM nvcr.io/nvidia/pytorch:23.12-py3
+FROM nvcr.io/nvidia/pytorch:24.08-py3
 ARG WANDB_SECRET
 RUN apt-get update -y && apt-get install git -y
 RUN pip install pandas numpy pkbar einops jupyterlab pathos
@@ -24,13 +24,12 @@ COPY ./src ./HLT/src
 RUN chmod +x ./HLT/src/main.py
 RUN mkdir -p ./HLT/artifacts
 
+ENV TOKENIZERS_PARALLELISM=false
+#
+# Allows for already allocated segments to expand in size: this is useful if,
+# as in our usecase, batches frequently change in size (the sequence dimension
+# has variable length across batches due to padding)
+ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# CMD ["python3", "./HLT/src/test.py"]
-# CMD ["python3", "./HLT/src/main.py"]
-# CMD ["python3", "./HLT/src/summarizer_test.py"]
-# CMD ["python3", "./HLT/src/generation_test.py"]
-# CMD ["python3", "./HLT/src/ste_test.py"]
 CMD ["python3", "./HLT/src/train_mt.py"]
-
-# CMD ["jupyter", "notebook", "--port=8888", "--no-browser", "--ip=0.0.0.0", "--allow-root"]
-# ENTRYPOINT ["tail", "-f", "/dev/null"]
+# CMD ["python3", "-m", "torch.utils.bottleneck", "./HLT/src/train_mt.py"]
