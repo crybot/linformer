@@ -7,12 +7,6 @@ from einops import rearrange
 from text.positional_encoding import SinPosEncoding
 from tokenizers import Tokenizer
 
-# TODO: Dataset, batching and training
-
-# TODO: Since we pretokenize the whole dataset with padding='longest', to save
-# some computatation we can truncate the sequences within each batch to the
-# length of the sequence with fewer pad tokens.
-
 # TODO: pipeline for data processing
 
 # TODO: remove asserts and raise exceptions
@@ -266,9 +260,9 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(dim)
 
         self.mlp = nn.Sequential(
-                nn.Linear(dim, mlp_dim),
+                nn.Linear(dim, mlp_dim, bias = False),
                 nn.ReLU(),
-                nn.Linear(mlp_dim, dim)
+                nn.Linear(mlp_dim, dim, bias = False)
                 )
 
     def forward(self, x, causal = False, mask = None):
@@ -304,9 +298,9 @@ class TransformerDecoderLayer(nn.Module):
         self.norm3 = nn.LayerNorm(dim)
 
         self.mlp = nn.Sequential(
-                nn.Linear(dim, mlp_dim),
+                nn.Linear(dim, mlp_dim, bias = False),
                 nn.ReLU(),
-                nn.Linear(mlp_dim, dim)
+                nn.Linear(mlp_dim, dim, bias = False)
                 )
 
     def forward(self, dec_out: Tensor, enc_out: Tensor, dec_mask: Tensor = None, enc_mask: Tensor = None) -> Tensor:
