@@ -3,9 +3,8 @@ import pandas as pd
 from torch import Tensor
 from torch.utils.data import Dataset
 from tokenizers import Tokenizer
-# from pytorch_transformers.tokenization_utils import PretrainedTokenizer
-# TODO correct type annotation for Tokenizer
 
+# TODO: could be more general
 class CSVDataset(Dataset):
     """
     Construct a torch.utils.data.Dataset from a CSV file with its entries possibly

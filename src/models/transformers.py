@@ -157,7 +157,6 @@ class MultiHeadAttention(nn.Module):
             if query_mask.dtype is not torch.bool:
                 query_mask = query_mask.bool()
 
-            # TODO: assert shape before unsqueezing masks
             # Add a new dimension at position 1 -> (B, 1, N)
             key_mask = key_mask.unsqueeze(1)
             query_mask = query_mask.unsqueeze(1)
@@ -357,9 +356,7 @@ class NLPTransformer(Transformer):
         # Already tokenized: preparing inputs and masks
         else:
             enc_in = src
-            dec_in = tgt[..., :-1]
-            if tgt_mask is not None:
-                tgt_mask = tgt_mask[..., :-1] # TODO
+            dec_in = tgt
 
         # Embedding
         enc_in = self.embedding(enc_in)
