@@ -90,21 +90,6 @@ class CustomTrainingLoop(TrainingLoop):
 
         return pred, loss
 
-def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
-    src, tgt, src_mask, tgt_mask = to_device(*inputs, device=device)
-
-    with torch.autocast(device_type=device):
-        pred = model(src, tgt, src_mask, tgt_mask, log=True)
-
-        # TODO: refactor masking
-        tgt_mask = tgt_mask[..., 1:].bool()
-        masked_pred = pred[tgt_mask].view(-1, model.classes)
-        masked_tgt = tgt[..., 1:][tgt_mask].reshape(-1)
-        loss = loss_fn(masked_pred, masked_tgt)
-
-    loss.backward()
-
-
 def main():
     dim = 512
     mlp_dim = 1024
@@ -127,8 +112,6 @@ def main():
 
     dataset = EncoderDecoderCSVDataset('./HLT/datasets/wmt14_translate_de-en_test.csv', src_key = 'en', tgt_key='de', tokenizer=tokenizer, device='cpu')
     opt = make_optimizer(torch.optim.Adam, lr=1e-4)
-
-    # warmup_model(model, dataset[:batch_size], loss_fn, device=device)
 
     training_loop = CustomTrainingLoop(
             dataset,
