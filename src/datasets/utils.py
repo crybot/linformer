@@ -5,7 +5,7 @@ from typing import Sized, Iterator
 import numpy as np
 import random
 from torch import default_generator, randperm
-from torch._utils import _accumulate
+import itertools
 
 def memory_safe_random_split(dataset, lengths, generator=default_generator, random=True):
     """ same as torch.utils.data.random_split, but passes a `ndarray` to Subset
@@ -21,7 +21,7 @@ def memory_safe_random_split(dataset, lengths, generator=default_generator, rand
     else:
         indices = np.arange(sum(lengths))
         
-    return [Subset(dataset, indices[offset - length : offset]) for offset, length in zip(_accumulate(lengths), lengths)]
+    return [Subset(dataset, indices[offset - length : offset]) for offset, length in zip(itertools.accumulate(lengths), lengths)]
 
 def split_dataset(ds, train_p=0.7, val_p=0.15, test_p=0.15, random=True, seed=42):
     """ Split a torch.utils.data.Datset into 3 random split, according to the
