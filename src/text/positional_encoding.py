@@ -18,11 +18,11 @@ def sinusoidal_pos_encoding(x: Tensor) -> Tensor:
     i_even = i % 2 == 0
     i_odd = ~i_even
 
-    pe = torch.empty(x.shape[1:], device=x.device)
-    pe[:, i_even] = torch.sin(pos / 10000**(i[i_even] / dim))
-    pe[:, i_odd] = torch.cos(pos / 10000**((i[i_odd] - 1) / dim))
-    return pe
-
+    pe_sin = torch.sin(pos / 10000 ** (i[i_even]/ dim))
+    pe_cos = torch.cos(pos / 10000 ** ((i[i_odd] - 1) / dim))
+    
+    pe = torch.cat([pe_sin, pe_cos], dim=-1)
+    return pe.view(x.shape[1:])
 
 class SinPosEncoding(nn.Module):
     def forward(self, x: Tensor) -> Tensor:
