@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from datasets import CSVDataset
 from training import TrainingLoop, make_optimizer
 import pkbar
-from training.callbacks import ProgressbarCallback
+from training.callbacks import ProgressbarCallback, WandbCallback, CheckpointCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
 from utils import to_device
@@ -95,9 +95,6 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
     inputs = to_device(*inputs, device=device)
     enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
 
-    print(enc_in.shape)
-    print(dec_in.shape)
-
     with torch.autocast(device_type=device):
         pred = model(enc_in, dec_in, enc_mask, dec_mask, log=True)
         pred = pred[tgt_mask]
@@ -106,16 +103,31 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
 
     loss.backward()
 
+# TODO: move to YAML or JSON file
+config = {
+        "dim" : 512, 
+        "mlp_dim" : 2048, 
+        "n_heads" : 8, 
+        "n_layers" : 3, 
+        "batch_size" : 128, 
+        "max_length" : 200, 
+        "learning_rate": 1e-4,
+        "epochs" : 20
+        }
 
 def main():
-    dim = 512
-    mlp_dim = 2048
-    n_heads = 8
-    n_layers = 3
-    batch_size = 128
-    max_length = 200
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    epochs = 5
+
+    dim = config['dim']
+    mlp_dim = config['mlp_dim']
+    n_heads = config['n_heads']
+    n_layers = config['n_layers']
+    batch_size = config['batch_size']
+    max_length = config['max_length']
+    learning_rate = config['learning_rate']
+    epochs = config['epochs']
+    
+    ARTIFACTS_PATH = './HLT/artifacts'
 
     attn = MultiHeadAttention(dim, n_heads)
     encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
@@ -132,23 +144,27 @@ def main():
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, padding = True, vocab_size = vocab_size)
     model = LanguageModelingHead(transformer).to(device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
+    opt = make_optimizer(torch.optim.Adam, lr=learning_rate)
 
-    # TODO: save npz of tokenized dataset to save time
     dataset = CSVDataset(
             './HLT/datasets/wmt14-tokenized.npz',
             from_dump=True
             )
-    # dataset = CSVDataset(
-    #         './HLT/datasets/wmt14_translate_de-en_train-0.csv',
-    #         src_key = 'en',
-    #         tgt_key='de',
-    #         tokenizer=tokenizer,
-    #         padding='max_length',
-    #         max_length=max_length,
-    #         truncation=True,
-    #         device='cpu'
-    #         )
-    opt = make_optimizer(torch.optim.Adam, lr=1e-4)
+    
+
+    wandb_callback = WandbCallback(
+            project_name='HLT',
+            entity='marco-pampaloni',
+            config=config,
+            tags=['test']
+            )
+    checkpoint_callback = CheckpointCallback(
+            path=ARTIFACTS_PATH + '/checkpoint.pt',
+            save_best=True,
+            metric='val_loss',
+            sync_wandb=True,
+            debug=True
+            )
 
     training_loop = CustomTrainingLoop(
             dataset,
@@ -166,6 +182,8 @@ def main():
             pad_token_id = tokenizer.pad_token_id,
             val_metrics = {'perplexity': seq2seq_perplexity},
             callbacks = [
+                wandb_callback,
+                checkpoint_callback,
                 ProgressbarCallback(epochs=epochs, width=20)
                 ]
             )

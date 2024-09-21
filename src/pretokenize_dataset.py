@@ -16,7 +16,7 @@ def main():
 
     print('Tokenizing dataset')
     dataset = CSVDataset(
-            './HLT/datasets/wmt14_translate_de-en_train-0.csv',
+            './HLT/datasets/wmt14_translate_de-en_train.csv',
             src_key = 'en',
             tgt_key='de',
             tokenizer=tokenizer,

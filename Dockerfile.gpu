@@ -17,7 +17,7 @@ WORKDIR /root
 RUN mkdir -p ./HLT
 
 COPY ./models ./HLT/models
-COPY ./datasets ./HLT/datasets
+# COPY ./datasets ./HLT/datasets
 
 
 COPY ./src ./HLT/src
