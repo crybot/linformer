@@ -8,6 +8,7 @@ docker run -it \
   --privileged \
   --ipc=host \
   -p 8888:8888 \
+  -v ./datasets:/root/HLT/datasets \
   --env CUBLAS_WORKSPACE_CONFIG=:4096:8 \
   hlt-training \
   $@

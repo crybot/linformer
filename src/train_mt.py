@@ -91,12 +91,29 @@ class CustomTrainingLoop(TrainingLoop):
 
         return pred, loss
 
+def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
+    inputs = to_device(*inputs, device=device)
+    enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
+
+    print(enc_in.shape)
+    print(dec_in.shape)
+
+    with torch.autocast(device_type=device):
+        pred = model(enc_in, dec_in, enc_mask, dec_mask, log=True)
+        pred = pred[tgt_mask]
+        tgt = tgt[tgt_mask].reshape(-1)
+        loss = loss_fn(pred.view(-1, model.classes), tgt)
+
+    loss.backward()
+
+
 def main():
     dim = 512
-    mlp_dim = 1024
+    mlp_dim = 2048
     n_heads = 8
     n_layers = 3
-    batch_size = 170
+    batch_size = 128
+    max_length = 200
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     epochs = 5
 
@@ -104,14 +121,33 @@ def main():
     encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
     decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
 
-    tokenizer = AutoTokenizer.from_pretrained('./HLT/models/facebook/bart-base', padding_side='right', clean_up_tokenization_spaces=True, use_fast=False)
+    tokenizer = AutoTokenizer.from_pretrained(
+            './HLT/models/facebook/bart-base',
+            padding_side='right',
+            clean_up_tokenization_spaces=True,
+            use_fast=False
+            )
     vocab_size = multiple_eight(tokenizer.vocab_size)
 
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, padding = True, vocab_size = vocab_size)
     model = LanguageModelingHead(transformer).to(device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
 
-    dataset = CSVDataset('./HLT/datasets/wmt14_translate_de-en_test.csv', src_key = 'en', tgt_key='de', tokenizer=tokenizer, device='cpu')
+    # TODO: save npz of tokenized dataset to save time
+    dataset = CSVDataset(
+            './HLT/datasets/wmt14-tokenized.npz',
+            from_dump=True
+            )
+    # dataset = CSVDataset(
+    #         './HLT/datasets/wmt14_translate_de-en_train-0.csv',
+    #         src_key = 'en',
+    #         tgt_key='de',
+    #         tokenizer=tokenizer,
+    #         padding='max_length',
+    #         max_length=max_length,
+    #         truncation=True,
+    #         device='cpu'
+    #         )
     opt = make_optimizer(torch.optim.Adam, lr=1e-4)
 
     training_loop = CustomTrainingLoop(
@@ -133,6 +169,8 @@ def main():
                 ProgressbarCallback(epochs=epochs, width=20)
                 ]
             )
+
+    warmup_model(model, dataset[:batch_size], loss_fn, device=device)
 
     training_loop.run(model, epochs=epochs)
 

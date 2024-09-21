@@ -11,26 +11,7 @@ from tokenizers import Tokenizer
 
 # TODO: remove asserts and raise exceptions
 
-# TODO: torch.compile before training to improve performance
-
-# NOTE: padding can be done on the left or right of each sequence. LLMs (which
-# are decoder-only architectures) are typically padded on the left during
-# inference or fine-tuning, since they are not pre-trained to continue
-# sentences from <pad> tokens. Padding on the right might be ok for encoder or
-# for sequence-to-sequence architectures, since training is typically carried
-# out with padding (decoder-only architectures do not need padding since they
-# can just truncate sequences up to a prefixed length from the training
-# corpus). Padding on the right might also be safer for absolute positional
-# encodings approaches.
-
 # TODO: scaled_dot_product_attention utility function
-
-# TODO: make TransformerDecoder and TransformerDecoderLayer agnostic of the use
-# of an encoder: that is it should be possible to use TransformerDecoder to
-# build a decoder-only architecture that does not use self-attention with the
-# encoder's output. Possibly, we could just use TransformerEncoder as a mean of
-# constructing decoder-olny architectures, by passing an `is_causal` argument
-# to it.
 
 # TODO: possibly integrate loss calculation within task heads (such as
 # LanguageModelingHead)

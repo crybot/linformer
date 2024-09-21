@@ -21,7 +21,6 @@ COPY ./datasets ./HLT/datasets
 
 
 COPY ./src ./HLT/src
-RUN chmod +x ./HLT/src/main.py
 RUN mkdir -p ./HLT/artifacts
 
 ENV TOKENIZERS_PARALLELISM=false
@@ -32,4 +31,5 @@ ENV TOKENIZERS_PARALLELISM=false
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 CMD ["python3", "./HLT/src/train_mt.py"]
+# CMD ["python3", "./HLT/src/pretokenize_dataset.py"]
 # CMD ["python3", "-m", "torch.utils.bottleneck", "./HLT/src/train_mt.py"]
