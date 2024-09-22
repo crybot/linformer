@@ -10,10 +10,12 @@ from torch.utils.data import DataLoader
 from datasets import CSVDataset
 from training import TrainingLoop, make_optimizer
 import pkbar
-from training.callbacks import ProgressbarCallback, WandbCallback, CheckpointCallback
+from training.callbacks import ProgressbarCallback, CheckpointCallback
+from training.callbacks import WandbCallback, LRSchedulerCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
 from utils import to_device, print_summary
+import yaml
 
 # TODO: Implement BLEU metric
 # NOTE: BLEU needs to be computed from a candidate translation against a (set
@@ -114,18 +116,6 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
 
     loss.backward()
 
-# TODO: move to YAML or JSON file
-config = {
-        "dim" : 512, 
-        "mlp_dim" : 2048, 
-        "n_heads" : 8, 
-        "n_layers" : 6, 
-        "batch_size" : 100, 
-        "max_length" : 200,
-        "learning_rate": 1e-4,
-        "epochs" : 20
-        }
-
 def make_model(config: dict, device='cpu') -> nn.Module:
     dim = config['dim']
     mlp_dim = config['mlp_dim']
@@ -139,10 +129,14 @@ def make_model(config: dict, device='cpu') -> nn.Module:
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
     return LanguageModelingHead(transformer).to(device)
 
+def load_config(path: str) -> dict:
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    batch_size = config['batch_size']
     ARTIFACTS_PATH = './HLT/artifacts'
+    config = load_config('./HLT/configs/experiment_config.yaml')
 
     tokenizer = AutoTokenizer.from_pretrained(
             './HLT/models/facebook/bart-base',
@@ -150,11 +144,13 @@ def main():
             clean_up_tokenization_spaces=True,
             use_fast=False
             )
-    config['vocab_size'] = multiple_eight(tokenizer.vocab_size)
+    config['model']['vocab_size'] = multiple_eight(tokenizer.vocab_size)
 
-    model = make_model(config, device=device)
+    print(config)
+
+    model = make_model(config['model'], device=device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
-    opt = make_optimizer(torch.optim.Adam, lr=config['learning_rate'])
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
     dataset = CSVDataset(
             './HLT/datasets/wmt14-tokenized.npz',
@@ -174,11 +170,18 @@ def main():
             sync_wandb=True,
             debug=True
             )
+    lr_scheduler_callback = LRSchedulerCallback(
+            optimizer,
+            config=config['training']['lr_scheduler']
+            )
+
+    epochs = config['training']['epochs']
+    batch_size = config['training']['batch_size']
 
     training_loop = CustomTrainingLoop(
             dataset,
             loss_fn,
-            opt,
+            optimizer,
             train_p = 0.8,
             val_p = 0.1,
             test_p = 0.1,
@@ -193,14 +196,15 @@ def main():
             callbacks = [
                 wandb_callback,
                 checkpoint_callback,
-                ProgressbarCallback(epochs=config['epochs'], width=20)
+                lr_scheduler_callback,
+                ProgressbarCallback(epochs=epochs, width=20)
                 ]
             )
-    
+
     print_summary(model, print_model=True)
     warmup_model(model, dataset[:batch_size], loss_fn, device=device)
 
-    training_loop.run(model, epochs=config['epochs'])
+    training_loop.run(model, epochs=epochs)
 
 if __name__ == '__main__':
     main()

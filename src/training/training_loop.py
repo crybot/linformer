@@ -17,7 +17,8 @@ class TrainingLoop():
     def __init__(self,
                  dataset,
                  loss_fn,
-                 optimizer_fn,
+                 # optimizer_fn,
+                 optimizer,
                  train_p=0.7,
                  val_p=0.15,
                  test_p=0.15,
@@ -37,7 +38,8 @@ class TrainingLoop():
         
         self.dataset = dataset
         self.loss_fn = loss_fn
-        self.optimizer_fn = optimizer_fn
+        # self.optimizer_fn = optimizer_fn
+        self.optimizer = optimizer
         self.train_p = train_p
         self.val_p = val_p
         self.test_p = test_p
@@ -218,7 +220,7 @@ class TrainingLoop():
     
     def run(self, model, epochs=10, verbose=1):
         self.model = model.to(self.device)
-        self.optimizer = self.optimizer_fn(self.model)
+        # self.optimizer = self.optimizer_fn(self.model)
         self.update_state('verbose', verbose)
         try:
             self._train(epochs)

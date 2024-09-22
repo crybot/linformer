@@ -116,19 +116,22 @@ class ProgressbarCallback(TrainingCallback):
                 *[(val_m(m), state.get_last_metric(val_m(m))) for m in other_metrics]
                 ])
 
+# TODO: provide config dictionary as input
 class LRSchedulerCallback(TrainingCallback):
-    def __init__(self, optimizer, warmup_steps=1000, cosine_annealing=True, restart=False, cosine_tmax=None, cosine_factor=None, min_lr=0.0):
+    def __init__(self, optimizer, warmup_steps=1000, cosine_annealing=True, restart=False, cosine_tmax=None, cosine_factor=None, min_lr=0.0, config={}):
         super().__init__()
         self.optimizer = optimizer
-        self.warmup_steps = warmup_steps
+        # self.warmup_steps = warmup_steps
+        self.warmup_steps=config.get('warmup_steps', warmup_steps)
         self.lr_warmup = LinearLR(self.optimizer, start_factor=0.001, total_iters=self.warmup_steps)
         self.lr_decay = ReduceLROnPlateau(self.optimizer, mode='min', factor=0.5, patience=5)
         self.lr_cosine = None
-        self.cosine_annealing = cosine_annealing
-        self.cosine_tmax = cosine_tmax
-        self.cosine_factor = cosine_factor
-        self.restart = restart
-        self.min_lr = min_lr
+
+        self.cosine_annealing = config.get('cosine_annealing', cosine_annealing)
+        self.cosine_tmax = config.get('cosine_tmax', cosine_tmax)
+        self.cosine_factor = config.get('cosine_factor', cosine_factor)
+        self.restart = config.get('cosine_restart', restart)
+        self.min_lr = config.get('min_lr', min_lr)
 
         if self.cosine_tmax is None and self.cosine_annealing:
             self.cosine_tmax = 50
