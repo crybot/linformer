@@ -13,8 +13,19 @@ import pkbar
 from training.callbacks import ProgressbarCallback, WandbCallback, CheckpointCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
-from utils import to_device
+from utils import to_device, print_summary
 
+# TODO: Implement BLEU metric
+# NOTE: BLEU needs to be computed from a candidate translation against a (set
+# of) reference ones. The problem is that the candidate has to be
+# autoregressively computed and this might take a while. Moreover this cannot
+# be computed in batches (or can it?) because of the variable length of each
+# production. We can defer this metric to a last evaluation step, not to be
+# computed as a validation step.
+
+# TODO: Move utility functions to an appropriate module
+
+# TODO: generalize
 def multiple_eight(n: int) -> int:
     return (n + 7) // 8 * 8
 
@@ -108,30 +119,30 @@ config = {
         "dim" : 512, 
         "mlp_dim" : 2048, 
         "n_heads" : 8, 
-        "n_layers" : 3, 
-        "batch_size" : 128, 
-        "max_length" : 200, 
+        "n_layers" : 6, 
+        "batch_size" : 100, 
+        "max_length" : 200,
         "learning_rate": 1e-4,
         "epochs" : 20
         }
 
-def main():
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
+def make_model(config: dict, device='cpu') -> nn.Module:
     dim = config['dim']
     mlp_dim = config['mlp_dim']
     n_heads = config['n_heads']
     n_layers = config['n_layers']
-    batch_size = config['batch_size']
-    max_length = config['max_length']
-    learning_rate = config['learning_rate']
-    epochs = config['epochs']
-    
-    ARTIFACTS_PATH = './HLT/artifacts'
+    vocab_size = config['vocab_size']
 
     attn = MultiHeadAttention(dim, n_heads)
     encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
     decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
+    transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
+    return LanguageModelingHead(transformer).to(device)
+
+def main():
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    batch_size = config['batch_size']
+    ARTIFACTS_PATH = './HLT/artifacts'
 
     tokenizer = AutoTokenizer.from_pretrained(
             './HLT/models/facebook/bart-base',
@@ -139,18 +150,16 @@ def main():
             clean_up_tokenization_spaces=True,
             use_fast=False
             )
-    vocab_size = multiple_eight(tokenizer.vocab_size)
+    config['vocab_size'] = multiple_eight(tokenizer.vocab_size)
 
-    transformer = NLPTransformer(encoder = encoder, decoder = decoder, padding = True, vocab_size = vocab_size)
-    model = LanguageModelingHead(transformer).to(device)
+    model = make_model(config, device=device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
-    opt = make_optimizer(torch.optim.Adam, lr=learning_rate)
+    opt = make_optimizer(torch.optim.Adam, lr=config['learning_rate'])
 
     dataset = CSVDataset(
             './HLT/datasets/wmt14-tokenized.npz',
             from_dump=True
             )
-    
 
     wandb_callback = WandbCallback(
             project_name='HLT',
@@ -184,13 +193,14 @@ def main():
             callbacks = [
                 wandb_callback,
                 checkpoint_callback,
-                ProgressbarCallback(epochs=epochs, width=20)
+                ProgressbarCallback(epochs=config['epochs'], width=20)
                 ]
             )
-
+    
+    print_summary(model, print_model=True)
     warmup_model(model, dataset[:batch_size], loss_fn, device=device)
 
-    training_loop.run(model, epochs=epochs)
+    training_loop.run(model, epochs=config['epochs'])
 
 if __name__ == '__main__':
     main()
