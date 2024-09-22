@@ -97,7 +97,7 @@ class ProgressbarCallback(TrainingCallback):
         # TODO: use self.metrics and self.state to update the progress bar
         batch = state.get_state('batch')
         verbose = state.get_state('verbose')
-        self.lr = self.lr + (state.get_state('lr') - self.lr) / (batch + 1)
+        self.lr = state.get_state('lr')
         self.loss = self.loss + (state.get_last_metric('loss') - self.loss) / (batch + 1)
         if verbose and batch is not None and self.loss and self.lr is not None:
             self.kbar.update(batch, values=[('loss', self.loss), ('lr', self.lr)])
