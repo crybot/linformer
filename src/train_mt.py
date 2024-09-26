@@ -1,6 +1,6 @@
 import torch
 from torch import nn, Tensor
-from models.transformers import Transformer, MultiHeadAttention
+from models.transformers import Transformer, MultiHeadAttention, LinformerAttention
 from models.transformers import TransformerEncoder, TransformerEncoderLayer
 from models.transformers import TransformerDecoder, TransformerDecoderLayer
 from models.transformers import NLPTransformer 
@@ -14,10 +14,15 @@ from training.callbacks import ProgressbarCallback, CheckpointCallback
 from training.callbacks import WandbCallback, LRSchedulerCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
-from utils import to_device, print_summary
+from utils import to_device, print_summary, set_random_state
 import yaml
 
+# TODO: Dropout as in the paper
+
+# TODO: Label smoothing
+
 # TODO: Implement BLEU metric
+
 # NOTE: BLEU needs to be computed from a candidate translation against a (set
 # of) reference ones. The problem is that the candidate has to be
 # autoregressively computed and this might take a while. Moreover this cannot
@@ -117,15 +122,22 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
     loss.backward()
 
 def make_model(config: dict, device='cpu') -> nn.Module:
+    n = config['dataset']['max_length']
+    config = config['model']
     dim = config['dim']
     mlp_dim = config['mlp_dim']
     n_heads = config['n_heads']
     n_layers = config['n_layers']
     vocab_size = config['vocab_size']
 
-    attn = MultiHeadAttention(dim, n_heads)
+    if config.get('type', None) == 'Linformer':
+        attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
+    else:
+        attn = MultiHeadAttention(dim, n_heads)
+
     encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
     decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
+
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
     return LanguageModelingHead(transformer).to(device)
 
@@ -134,6 +146,8 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 def main():
+    set_random_state(42)
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     ARTIFACTS_PATH = './HLT/artifacts'
     config = load_config('./HLT/configs/experiment_config.yaml')
@@ -148,12 +162,12 @@ def main():
 
     print(config)
 
-    model = make_model(config['model'], device=device)
+    model = make_model(config, device=device)
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
     dataset = CSVDataset(
-            './HLT/datasets/wmt14-tokenized.npz',
+            './HLT/datasets/wmt14-050-tokenized-256.npz',
             from_dump=True
             )
 
@@ -182,9 +196,9 @@ def main():
             dataset,
             loss_fn,
             optimizer,
-            train_p = 0.8,
-            val_p = 0.1,
-            test_p = 0.1,
+            train_p = 0.99,
+            val_p = 0.01,
+            test_p = 0.0,
             random_split = False,
             mixed_precision = True,
             batch_size = batch_size,
@@ -202,7 +216,6 @@ def main():
             )
 
     print_summary(model, print_model=True)
-    warmup_model(model, dataset[:batch_size], loss_fn, device=device)
 
     training_loop.run(model, epochs=epochs)
 
