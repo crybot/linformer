@@ -9,7 +9,8 @@ declare -a FILES_LM=(
 "vocab.json"
 "tokenizer.json"
 "tokenizer_config.json"
-"generation_config_for_summarization.json"
+"generation_config_for_summarization.json",
+"spiece.model"
 )
 
 declare -a MODELS=(
@@ -17,7 +18,8 @@ declare -a MODELS=(
 "facebook/bart-base"
 "facebook/bart-large"
 "facebook/bart-large-cnn"
-"google-bert/bert-large-uncased"
+"google-bert/bert-large-uncased",
+"google-t5/t5-small"
 )
 
 function validate_url(){

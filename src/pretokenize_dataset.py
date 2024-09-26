@@ -6,7 +6,7 @@ from datasets import CSVDataset
 # TODO: command line arguments
 
 def main():
-    max_length = 200
+    max_length = 256
     tokenizer = AutoTokenizer.from_pretrained(
             './HLT/models/facebook/bart-base',
             padding_side='right',
@@ -28,7 +28,7 @@ def main():
     print('Tokenization complete')
     print('Saving dataset dump')
 
-    dataset.save_dump("./HLT/datasets/wmt14-tokenized")
+    dataset.save_dump(f'./HLT/datasets/wmt14-050-tokenized-{max_length}')
 
     print('Dump successfully saved')
 
