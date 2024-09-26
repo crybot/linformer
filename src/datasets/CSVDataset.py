@@ -31,6 +31,10 @@ class CSVDataset(Dataset):
             ) -> None:
         self.from_dump = from_dump
         self.tokenizer = tokenizer
+        self.padding = padding
+        self.max_length = max_length
+        self.truncation = truncation
+        self.device = device
 
         if from_dump:
             self._load_dump(path)
@@ -52,42 +56,67 @@ class CSVDataset(Dataset):
             batch_size = 500
             batches = len(self.src) // batch_size
 
-            # TODO: last batch
+            if len(self.src) != len(self.tgt):
+                raise ValueError('src and tgt must have the same length')
+
             if self.tokenizer:
-                for i in range(batches):
+                i = 0
+                while len(self.src) > 0:
                     print(f'Processing batch {i}/{batches}')
-                    idx_text = slice(0, batch_size)
-                    idx_tokens = slice(i*batch_size, (i + 1)*batch_size)
+                    idx = slice(0, min(batch_size, len(self.src)))
+                    src, tgt, src_masks, tgt_masks = self._tokenize_batch(
+                        self.src[idx],
+                        self.tgt[idx]
+                        )
 
-                    src = tokenizer(self.src[idx_text], padding=padding, max_length=max_length, truncation=truncation, return_tensors='np')
-                    src_t[idx_tokens] = src.input_ids.copy()
-                    src_masks_t[idx_tokens] = src.attention_mask.copy()
+                    idx = slice(i*batch_size, i*batch_size + len(src))
+                    src_t[idx] = src
+                    src_masks_t[idx] = src_masks
+                    tgt_t[idx] = tgt
+                    tgt_masks_t[idx] = tgt_masks
 
-                    tgt = tokenizer(self.tgt[idx_text], padding=padding, max_length=max_length, truncation=truncation, return_tensors='np')
-                    tgt_t[idx_tokens] = tgt.input_ids.copy()
-                    tgt_masks_t[idx_tokens] = tgt.attention_mask.copy()
-
-                    del src
-                    del tgt
                     del self.src[:batch_size]
                     del self.tgt[:batch_size]
 
-
                     if i % 100 == 0:
                         gc.collect()
+
+                    i += 1
+
                 self.src = src_t
                 self.tgt = tgt_t
                 self.src_masks = src_masks_t
                 self.tgt_masks = tgt_masks_t
 
-            if len(self.src) != len(self.tgt):
-                raise ValueError('src and tgt must have the same length')
+
+    def _tokenize_batch(self, src, tgt):
+        assert len(src) == len(tgt)
+
+        encoded = self.tokenizer(
+            src,
+            padding=self.padding,
+            max_length=self.max_length,
+            truncation=self.truncation,
+            return_tensors='np'
+            )
+        src = encoded.input_ids.copy()
+        src_masks = encoded.attention_mask.copy()
+
+        encoded = self.tokenizer(
+            tgt,
+            padding=self.padding,
+            max_length=self.max_length,
+            truncation=self.truncation,
+            return_tensors='np'
+            )
+        tgt = encoded.input_ids.copy()
+        tgt_masks = encoded.attention_mask.copy()
+
+        return src, tgt, src_masks, tgt_masks
 
     def save_dump(self, file: str):
         """ Save dataset as an uncompressed npz file """
         np.savez(file, src=self.src, tgt=self.tgt, src_masks=self.src_masks, tgt_masks=self.tgt_masks)
-        # np.savez(file, src=self.src, tgt=self.tgt, src_masks=self.src_masks, tgt_masks=self.tgt_masks)
-        # torch.save({'src': self.src_t, 'tgt': self.tgt_t, 'src_masks': self.src_masks_t, 'tgt_masks': self.tgt_masks_t}, file)
 
     def _load_dump(self, npz_path: str) -> None:
         """ 
