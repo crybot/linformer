@@ -189,15 +189,16 @@ class TrainingLoop():
         test_loss = 0.0
         test_metrics = dict.fromkeys(metrics.keys(), 0.0)
         with torch.no_grad():
-            for inputs in dataloader:
+            for batch, inputs in enumerate(dataloader):
                 inputs = self.preprocess_batch(inputs)
                 pred, loss = self.forward(inputs)
-                test_loss += loss.detach()
+                loss = loss.detach()
+                test_loss = test_loss + (test_loss - self.loss) / (batch + 1)
 
                 for name, fn in metrics.items():
                     test_metrics[name] += fn(pred, inputs).detach()
 
-        test_loss /= num_batches
+        # test_loss /= num_batches
         test_metrics = {k: v / num_batches for k, v in test_metrics.items()}
         return test_loss, test_metrics
 

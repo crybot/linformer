@@ -116,7 +116,6 @@ class ProgressbarCallback(TrainingCallback):
                 *[(val_m(m), state.get_last_metric(val_m(m))) for m in other_metrics]
                 ])
 
-# TODO: provide config dictionary as input
 class LRSchedulerCallback(TrainingCallback):
     def __init__(self, optimizer, warmup_steps=1000, cosine_annealing=True, restart=False, cosine_tmax=None, cosine_factor=None, min_lr=0.0, config={}):
         super().__init__()
