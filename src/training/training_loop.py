@@ -193,10 +193,11 @@ class TrainingLoop():
                 inputs = self.preprocess_batch(inputs)
                 pred, loss = self.forward(inputs)
                 loss = loss.detach()
-                test_loss = test_loss + (test_loss - self.loss) / (batch + 1)
+                test_loss = test_loss + (loss - test_loss) / (batch + 1)
 
                 for name, fn in metrics.items():
-                    test_metrics[name] += fn(pred, inputs).detach()
+                    v = test_metrics[name]
+                    test_metrics[name] = v + (fn(pred, inputs).detach() - v) / (batch + 1)
 
         # test_loss /= num_batches
         test_metrics = {k: v / num_batches for k, v in test_metrics.items()}

@@ -47,8 +47,6 @@ class CSVDataset(Dataset):
             src_masks_t = np.zeros((len(self.src), max_length), dtype=int)
             tgt_masks_t = np.zeros((len(self.src), max_length), dtype=int)
 
-            print('Tensors allocated')
-
             self.tgt = df[tgt_key].tolist()
 
             batch_size = 500
@@ -68,9 +66,6 @@ class CSVDataset(Dataset):
                     tgt = tokenizer(self.tgt[idx_text], padding=padding, max_length=max_length, truncation=truncation, return_tensors='np')
                     tgt_t[idx_tokens] = tgt.input_ids.copy()
                     tgt_masks_t[idx_tokens] = tgt.attention_mask.copy()
-
-                    print(src)
-                    print(tgt)
 
                     del src
                     del tgt
