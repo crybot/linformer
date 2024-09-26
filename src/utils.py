@@ -10,7 +10,7 @@ def set_random_state(seed):
     torch.manual_seed(seed)
     random.seed(seed)
     np.random.seed(seed)
-    # torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.benchmark = False
     # torch.use_deterministic_algorithms(True)
 
 def params_count(model):
@@ -19,7 +19,7 @@ def params_count(model):
 def print_summary(model, print_model=False):
     if print_model:
         print(model)
-        print(f'Number of parameters: {params_count(model)}')
+    print(f'Number of parameters: {params_count(model)}')
 
 def to_device(*tensors, device):
     return tuple(tensor.to(device) for tensor in tensors)

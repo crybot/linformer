@@ -6,17 +6,65 @@ from torch import Tensor, nn
 from einops import rearrange
 from text.positional_encoding import SinPosEncoding
 from tokenizers import Tokenizer
+from typing import Optional
 
 # TODO: pipeline for data processing
 
 # TODO: remove asserts and raise exceptions
 
-# TODO: scaled_dot_product_attention utility function
-
 # TODO: possibly integrate loss calculation within task heads (such as
 # LanguageModelingHead)
 
 # TODO: define and annotate class parameters
+
+# TODO: linformer attention causal masking
+
+# TODO: MaskedTensor interface
+
+def scaled_dot_product_attention(
+        q: Tensor,
+        k: Tensor,
+        v: Tensor,
+        attention_mask: Optional[Tensor] = None,
+        dim = None
+        ) -> Tensor:
+    if not dim:
+        dim = k.shape[-1]
+
+    # Batched Query-Value matrix multiplications over the last two dims:
+    # the remaining are considered as batch dimensions
+    attn = torch.matmul(q, k.transpose(-1, -2))
+
+    # Normalization: we scale by the sqrt of the dimension of each head because
+    # QK^T computes, for each head, dot products with vectors of dimension
+    # inner_dim. If the vectors were (independent and) randomly
+    # distributed with mean 0 and unit variance then the variance of the
+    # dot product would be inner_dim. So scaling by the standard
+    # deviation is a sound normalization scheme.
+    attn = attn / math.sqrt(dim)
+
+    if attention_mask is not None:
+        attn = attn + attention_mask
+
+    # Row softmax
+    attn = torch.softmax(attn, dim = -1)
+
+    # Hack to prevent softmax from producing `nan`s when entire rows of the
+    # activation matrix are "masked" with -inf. This should be better
+    # approached with MaskedTensors, but they are still a propotype
+    # feature. An alternative approach would be to use
+    # torch.finfo(attn.dtype).min as filling value instead of -inf, but this
+    # would produce a uniform distribution instead of all zeros. These
+    # values are not considered during computation due to column masking,
+    # but they might interfere during the last projections.
+
+    # NOTE: disabled because it breaks gradient flow
+    # attn = torch.nan_to_num(attn, 0.0)
+
+    # Value multiplication
+    attn = torch.matmul(attn, v)
+
+    return attn
 
 def is_initializable(module: nn.Module) -> bool:
     return isinstance(module, tuple([nn.Linear, nn.LayerNorm]))
@@ -44,6 +92,7 @@ class Replicated(nn.Module):
         for layer in self.stacked:
             x = layer(x, *args, **kwargs)
         return x
+
 
 class MultiHeadAttention(nn.Module):
     """ Multi head attention module.
@@ -104,27 +153,9 @@ class MultiHeadAttention(nn.Module):
 
         q, k, v = self._qkv_proj(query, key, value)
 
-        # Batched Query-Value matrix multiplications over the last two dims:
-        # the remaining are considered as batch dimensions
-        attn = torch.matmul(q, k.transpose(-1, -2))
-
-        # Normalization: we scale by the sqrt of the dimension of each head because
-        # QK^T computes, for each head, dot products with vectors of dimension
-        # self.inner_dim. If the vectors were (independent and) randomly
-        # distributed with mean 0 and unit variance then the variance of the
-        # dot product would be self.inner_dim. So scaling by the standard
-        # deviation is a sound normalization scheme.
-        attn = attn / math.sqrt(self.inner_dim)
-
-
-        # Masking:
-        # We do not assume, in general, that masked positions appear on the
-        # sides. There might be reasons to mask tokens within the boundaries of
-        # a sequence: for example, sparse attention, etc.
-        # NOTE: using -inf as fill value breaks the optimizer
-
         # fill_value = float('-inf')
-        fill_value = torch.finfo(attn.dtype).min
+        fill_value = torch.finfo(q.dtype).min
+        mask = None
         if key_mask is not None:
 
             assert key_mask.shape[1] == key.shape[1] # must match sequence length
@@ -157,7 +188,6 @@ class MultiHeadAttention(nn.Module):
             # the attention matrix is (B, H, N, N) so the mask is broadcasted H
             # times along that dimension
             mask = mask.unsqueeze(1)
-            attn = attn + mask
 
         if causal:
             # By masking the elements of the preactivation attention matrix to
@@ -167,24 +197,73 @@ class MultiHeadAttention(nn.Module):
             # (because of padding they all have the same length)
             n = query.shape[1]
             causal_mask = torch.full((n, n), fill_value, device=query.device).triu(diagonal=1)
-            attn = attn + causal_mask
+            if mask is not None:
+                mask = mask + causal_mask
+            else:
+                mask = causal_mask
 
-        # Row softmax
-        attn = torch.softmax(attn, dim = -1)
+        attn = scaled_dot_product_attention(q, k, v, attention_mask=mask, dim=self.inner_dim)
 
-        # Hack to prevent softmax from producing `nan`s when entire rows of the
-        # activation matrix are "masked" with -inf. This should be better
-        # approached with MaskedTensors, but they are still a propotype
-        # feature. An alternative approach would be to use
-        # torch.finfo(attn.dtype).min as filling value instead of -inf, but this
-        # would produce a uniform distribution instead of all zeros. These
-        # values are not considered during computation due to column masking,
-        # but they might interfere during the last projections.
-        # NOTE: disabled because it hindered optimization
-        # attn = torch.nan_to_num(attn, 0.0)
+        # Concatenate heads
+        attn = rearrange(attn, 'b h n d -> b n (h d)')
 
-        # Value multiplication
-        attn = torch.matmul(attn, v)
+        # Project back to dim (unnecessary if self.inner_dim * n_heads == dim)
+        if self.inner_dim * self.n_heads != self.dim:
+            attn = self.out_proj(attn)
+
+        assert attn.shape[-1] == self.dim
+        return attn
+
+class LinformerAttention(MultiHeadAttention):
+    """ Multi head attention with linear projections on K and V
+    """
+    def __init__(self, *args, k: int, sequence_length: int, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k
+        self.sequence_length = sequence_length
+
+        # Using Linear so that it automatically handles initialization
+        self.E = nn.Linear(sequence_length, k, bias=False)
+        self.F = nn.Linear(sequence_length, k, bias=False)
+
+    def forward(
+            self,
+            query: Tensor,
+            key: Tensor,
+            value: Tensor,
+            causal: bool = False,
+            key_mask: Tensor = None,
+            query_mask: Tensor = None,
+            full = False,
+            ) -> Tensor:
+
+        if (key_mask is None) != (query_mask is None):
+            raise ValueError("Either both key_mask and query_mask must be None, or both must be provided.")
+
+        q, k, v = self._qkv_proj(query, key, value)
+
+        # TODO: mask before projecting on (query, key, value)
+        if query_mask is not None:
+            q = q.masked_fill(~query_mask.unsqueeze(-1).unsqueeze(1).bool(), 0.0)
+
+        # Share same mask for K and V
+        if key_mask is not None:
+            k = k.masked_fill(~key_mask.unsqueeze(-1).unsqueeze(1).bool(), 0.0)
+            v = v.masked_fill(~key_mask.unsqueeze(-1).unsqueeze(1).bool(), 0.0)
+
+        # Broadcast E @ K and F @ V over batch and head dimensions
+        if not full:
+            proj_k = self.E.weight
+            proj_v = self.F.weight
+
+            if key.shape[1] < self.sequence_length:
+                proj_k = proj_k[:, :key.shape[1]]
+                proj_v = proj_v[:, :key.shape[1]]
+
+            k = torch.matmul(proj_k, k)
+            v = torch.matmul(proj_v, v)
+
+        attn = scaled_dot_product_attention(q, k, v, dim = self.inner_dim)
 
         # Concatenate heads
         attn = rearrange(attn, 'b h n d -> b n (h d)')
