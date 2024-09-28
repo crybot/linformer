@@ -276,21 +276,28 @@ class LinformerAttention(MultiHeadAttention):
         return attn
 
 class Transformer(nn.Module):
-    def __init__(self, encoder: nn.Module = None, decoder: nn.Module = None):
+    def __init__(self, encoder: nn.Module, decoder: nn.Module):
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
 
-        assert self.encoder or self.decoder, "Either an encoder or a decoder should be defined."
-
         self.dim = self.encoder.dim if self.encoder else self.decoder.dim
 
-    def forward(self, enc_in: Tensor, dec_in: Tensor, enc_mask: Tensor = None, dec_mask: Tensor = None):
-        if self.encoder:
-            enc_in = self.encoder(enc_in, mask = enc_mask)
-        if self.decoder:
-            dec_in = self.decoder(dec_in, enc_in, dec_mask = dec_mask, enc_mask = enc_mask)
-        return dec_in
+    def forward(
+            self,
+            enc_in: Tensor,
+            dec_in: Tensor,
+            enc_mask: Tensor = None,
+            dec_mask: Tensor = None,
+            return_enc_output: bool = False,
+            ):
+        enc_out = self.encoder(enc_in, mask = enc_mask)
+        dec_out = self.decoder(dec_in, enc_out, dec_mask = dec_mask, enc_mask = enc_mask)
+
+        if return_enc_output:
+            return enc_out, dec_out
+
+        return dec_out
 
     def reset_parameters(self) -> None:
         self.encoder.reset_parameters()
@@ -394,7 +401,7 @@ class NLPTransformer(Transformer):
         if not self.embedding:
             self.embedding = nn.Embedding(self.vocab_size, self.dim)
 
-    def forward(self, src, tgt, src_mask = None, tgt_mask = None, device='cpu'):
+    def forward(self, src, tgt, src_mask = None, tgt_mask = None, device='cpu', **kwargs):
         # Tokenization
         if self.tokenizer:
             # TODO: return_tensors='pt': how to allocate them on device?
@@ -425,9 +432,16 @@ class NLPTransformer(Transformer):
         # Positional encoding
         enc_in = self.pos_encoding(enc_in)
         dec_in = self.pos_encoding(dec_in)
-        
-        pred = super().forward(enc_in, dec_in, enc_mask = src_mask, dec_mask = tgt_mask)
 
+        
+        pred = super().forward(enc_in, dec_in, enc_mask = src_mask, dec_mask = tgt_mask, **kwargs)
+
+        return pred
+
+    def decode(self, enc_out, dec_in, enc_mask = None, dec_mask = None):
+        dec_in = self.embedding(dec_in) # TODO: can optimize
+        dec_in = self.pos_encoding(dec_in)
+        pred = self.decoder(dec_in, enc_out, dec_mask = dec_mask, enc_mask = enc_mask)
         return pred
 
 class PointwiseClassificationHead(nn.Module):
@@ -442,8 +456,7 @@ class PointwiseClassificationHead(nn.Module):
         self.classes = classes
         self.linear = nn.Linear(in_dim, classes)
 
-    def forward(self, *args, log: bool = False, **kwargs) -> Tensor:
-        out = self.model(*args, **kwargs) # (B, N, D)
+    def lsm(self, out: Tensor, log: bool = False) -> Tensor:
         out = self.linear(out) # (B, N, C)
 
         # Broadcasted along (B, N) dimensions
@@ -453,7 +466,10 @@ class PointwiseClassificationHead(nn.Module):
             out = torch.softmax(out, dim=-1)
         return out
 
-# TODO: create basic record type for the returned object
+    def forward(self, *args, log: bool = False, **kwargs) -> Tensor:
+        out = self.model(*args, **kwargs) # (B, N, D)
+        return self.lsm(out, log = log)
+
 class LanguageModelingHead(PointwiseClassificationHead):
     def __init__(
             self,
@@ -461,18 +477,38 @@ class LanguageModelingHead(PointwiseClassificationHead):
             loss_fn: nn.Module = None,
             ) -> None:
         super().__init__(model, model.dim, model.vocab_size)
-        # self.loss_fn = loss_fn
-        # self.loss = -100.0
 
-        # if not self.loss_fn:
-        #     self.loss_fn = nn.NLLLoss(reduction='none')
+    # TODO: pad masks
+    def generate(
+            self,
+            src: Tensor,
+            inputs: Optional[Tensor] = None,
+            max_length: int = 50,
+            bos_token_id: int = None,
+            eos_token_id: int = None
+            ) -> Tensor:
+        """ Implements a very rough version of greedy decoding """
+        if inputs is None:
+            if bos_token_id is None:
+                raise ValueError('bos_token_id is required when no input tensor is provided')
+            inputs = torch.full((src.shape[0], 1), bos_token_id, dtype=torch.long, device=src.device)
 
-    def forward(self, src, tgt, *args, **kwargs):
-        out = super().forward(src, tgt, *args, **kwargs)
-        # if compute_loss:
-        #     pred = out[0].view(-1, self.classes)
-        #     target = out[1].view(-1)
-        #     self.loss = self.loss_fn(pred, target)
 
-        return out
-        
+        self.model.eval()
+        with torch.no_grad():
+            enc_out, dec_out = self.model.forward(src, inputs, return_enc_output=True)
+
+            dec_out = self.lsm(dec_out)
+            next_token = torch.argmax(dec_out, dim=-1)
+            inputs = torch.cat([inputs, next_token], dim=-1)
+
+            for i in range(max_length):
+                dec_out = self.model.decode(enc_out, inputs)
+                dec_out = self.lsm(dec_out)[:, -1:, :] # Consider only last predicted token
+                next_token = torch.argmax(dec_out, dim=-1)
+                inputs = torch.cat([inputs, next_token], dim=-1)
+       
+        return inputs
+
+
+
