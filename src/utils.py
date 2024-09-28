@@ -1,6 +1,8 @@
 import torch
 import random
 import numpy as np
+import wandb
+import os
 
 #TODO: refactor
 #TODO: move to appropriate modules
@@ -24,3 +26,13 @@ def print_summary(model, print_model=False):
 def to_device(*tensors, device):
     return tuple(tensor.to(device) for tensor in tensors)
 
+def download_wandb_checkpoint(run_path, filename, device='cuda'):
+    api = wandb.Api()
+
+    run = api.run(run_path)
+    run.file(filename).download(replace=True)
+    checkpoint = torch.load(filename, map_location=torch.device(device))
+    return checkpoint
+
+def save_wandb_file(path):
+    wandb.save(path, base_path=os.path.dirname(path))

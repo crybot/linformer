@@ -201,7 +201,16 @@ class LRSchedulerCallback(TrainingCallback):
 
 
 class WandbCallback(TrainingCallback):
-    def __init__(self, project_name, entity, config=None, tags=None, save_code=True, log=True, batch_frequency=None):
+    def __init__(
+            self,
+            project_name,
+            entity,
+            config=None,
+            tags=None,
+            save_code=True,
+            log=True,
+            batch_frequency=None
+            ):
         super().__init__()
         self.project_name = project_name
         self.entity = entity
@@ -221,7 +230,7 @@ class WandbCallback(TrainingCallback):
         self.run_id = state_dict.get('run_id', None)
 
     def init(self):
-        return wandb.init(
+        run = wandb.init(
                 id=self.run_id,
                 project=self.project_name,
                 entity=self.entity,
@@ -230,6 +239,9 @@ class WandbCallback(TrainingCallback):
                 tags=self.tags,
                 save_code=self.save_code,
                 reinit=True)
+        if self.save_code:
+            run.log_code(".")
+        return run
 
 
     def on_train_start(self, state):

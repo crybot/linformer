@@ -14,8 +14,9 @@ from training.callbacks import ProgressbarCallback, CheckpointCallback
 from training.callbacks import WandbCallback, LRSchedulerCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
-from utils import to_device, print_summary, set_random_state
+from utils import to_device, print_summary, set_random_state, download_wandb_checkpoint
 import yaml
+import argparse
 
 # TODO: Dropout as in the paper
 
@@ -145,8 +146,15 @@ def load_config(path: str) -> dict:
     with open(path, 'r') as f:
         return yaml.safe_load(f)
 
+def parse_args():
+    # Initialize the argument parser
+    parser = argparse.ArgumentParser(description="Script with --checkpoint flag")
+    parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
+    return parser.parse_args()
+
 def main():
     set_random_state(42)
+    args = parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     ARTIFACTS_PATH = './HLT/artifacts'
@@ -192,6 +200,7 @@ def main():
     epochs = config['training']['epochs']
     batch_size = config['training']['batch_size']
 
+    # TODO: val_dataset batchs_size (no backward phase, so can be 2-3x bigger)
     training_loop = CustomTrainingLoop(
             dataset,
             loss_fn,
@@ -216,6 +225,13 @@ def main():
             )
 
     print_summary(model, print_model=True)
+
+    # TODO: project name, user and checkpoint filename
+    if args.checkpoint:
+        print(f'Checkpoint path provided: {args.checkpoint}')
+        print(f'Resuming...')
+        checkpoint = download_wandb_checkpoint(f'marco-pampaloni/HLT/{args.checkpoint}', 'checkpoint.pt', device=device)
+        training_loop.load_state(model, checkpoint)
 
     training_loop.run(model, epochs=epochs)
 
