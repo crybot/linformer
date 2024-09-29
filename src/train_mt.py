@@ -15,6 +15,7 @@ from training.callbacks import WandbCallback, LRSchedulerCallback
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
 from utils import to_device, print_summary, set_random_state, download_wandb_checkpoint
+from utils import make_model
 import yaml
 import argparse
 
@@ -122,25 +123,6 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
 
     loss.backward()
 
-def make_model(config: dict, device='cpu') -> nn.Module:
-    n = config['dataset']['max_length']
-    config = config['model']
-    dim = config['dim']
-    mlp_dim = config['mlp_dim']
-    n_heads = config['n_heads']
-    n_layers = config['n_layers']
-    vocab_size = config['vocab_size']
-
-    if config.get('type', None) == 'Linformer':
-        attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
-    else:
-        attn = MultiHeadAttention(dim, n_heads)
-
-    encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
-    decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
-
-    transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
-    return LanguageModelingHead(transformer).to(device)
 
 def load_config(path: str) -> dict:
     with open(path, 'r') as f:
@@ -230,7 +212,7 @@ def main():
     if args.checkpoint:
         print(f'Checkpoint path provided: {args.checkpoint}')
         print(f'Resuming...')
-        checkpoint = download_wandb_checkpoint(f'marco-pampaloni/HLT/{args.checkpoint}', 'checkpoint.pt', device=device)
+        checkpoint = download_wandb_checkpoint(f'HLT/{args.checkpoint}', 'checkpoint.pt', device=device)
         training_loop.load_state(model, checkpoint)
 
     training_loop.run(model, epochs=epochs)

@@ -6,6 +6,7 @@ import pandas as pd
 import readline
 import os
 import atexit
+import models.transformers
 from models.transformers import Transformer, MultiHeadAttention
 from models.transformers import TransformerEncoder, TransformerEncoderLayer
 from models.transformers import TransformerDecoder, TransformerDecoderLayer
@@ -14,6 +15,8 @@ from models.transformers import LanguageModelingHead
 from transformers import AutoTokenizer
 import datasets
 from datasets import CSVDataset
+import utils
+from utils import download_wandb_checkpoint, load_model_from_wandb_checkpoint
 
 
 print("Python interactive shell started with default imports!")

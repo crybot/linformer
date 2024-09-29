@@ -1,8 +1,13 @@
 FROM nvcr.io/nvidia/pytorch:24.08-py3
+ARG WANDB_SECRET
+RUN test -n "$WANDB_SECRET" # makes WANDB_SECRET mandatory for the build
+RUN pip install --upgrade wandb && \
+    wandb login $WANDB_SECRET
 RUN pip install pandas numpy pkbar einops jupyterlab pathos
 RUN pip install transformers tqdm boto3 requests regex sentencepiece sacremoses
 RUN pip install accelerate
 RUN pip install bitsandbytes
+RUN pip install wandb
 
 WORKDIR /root
 

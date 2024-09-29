@@ -483,7 +483,7 @@ class LanguageModelingHead(PointwiseClassificationHead):
             self,
             src: Tensor,
             inputs: Optional[Tensor] = None,
-            max_length: int = 50,
+            max_length: int = 200,
             bos_token_id: int = None,
             eos_token_id: int = None
             ) -> Tensor:
