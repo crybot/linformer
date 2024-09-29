@@ -8,6 +8,7 @@ RUN pip install transformers tqdm boto3 requests regex sentencepiece sacremoses
 RUN pip install accelerate
 RUN pip install bitsandbytes
 RUN pip install wandb
+RUN pip install sacrebleu
 
 WORKDIR /root
 

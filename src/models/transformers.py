@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from einops import rearrange
 from text.positional_encoding import SinPosEncoding
 from tokenizers import Tokenizer
-from typing import Optional
+from typing import Optional, Union
 
 # TODO: pipeline for data processing
 
@@ -147,7 +147,6 @@ class MultiHeadAttention(nn.Module):
             key_mask: Tensor = None,
             query_mask: Tensor = None,
             ) -> Tensor:
-
         if (key_mask is None) != (query_mask is None):
             raise ValueError("Either both key_mask and query_mask must be None, or both must be provided.")
 
@@ -236,7 +235,6 @@ class LinformerAttention(MultiHeadAttention):
             query_mask: Tensor = None,
             full = False,
             ) -> Tensor:
-
         if (key_mask is None) != (query_mask is None):
             raise ValueError("Either both key_mask and query_mask must be None, or both must be provided.")
 
@@ -433,9 +431,7 @@ class NLPTransformer(Transformer):
         enc_in = self.pos_encoding(enc_in)
         dec_in = self.pos_encoding(dec_in)
 
-        
         pred = super().forward(enc_in, dec_in, enc_mask = src_mask, dec_mask = tgt_mask, **kwargs)
-
         return pred
 
     def decode(self, enc_out, dec_in, enc_mask = None, dec_mask = None):
@@ -478,37 +474,54 @@ class LanguageModelingHead(PointwiseClassificationHead):
             ) -> None:
         super().__init__(model, model.dim, model.vocab_size)
 
-    # TODO: pad masks
     def generate(
             self,
             src: Tensor,
+            tokenizer: Tokenizer,
             inputs: Optional[Tensor] = None,
+            src_mask: Optional[Tensor] = None,
             max_length: int = 200,
-            bos_token_id: int = None,
-            eos_token_id: int = None
-            ) -> Tensor:
+            decode = True
+            ) -> Union[Tensor, list[str]]:
         """ Implements a very rough version of greedy decoding """
+        pad_token_id = tokenizer.pad_token_id
+        bos_token_id = tokenizer.bos_token_id
+        eos_token_id = tokenizer.eos_token_id
+
         if inputs is None:
-            if bos_token_id is None:
-                raise ValueError('bos_token_id is required when no input tensor is provided')
             inputs = torch.full((src.shape[0], 1), bos_token_id, dtype=torch.long, device=src.device)
 
+        batch_size = inputs.shape[0]
+        eos_flags = torch.zeros(batch_size)
+        final_outputs = torch.full((batch_size, max_length), pad_token_id)
 
         self.model.eval()
         with torch.no_grad():
-            enc_out, dec_out = self.model.forward(src, inputs, return_enc_output=True)
+            # Wastes one decoding iteration but the code is much nicer
+            tgt_mask = torch.ones_like(inputs)
+            enc_out, _ = self.model.forward(src, inputs, src_mask = src_mask, tgt_mask = tgt_mask, return_enc_output=True)
 
-            dec_out = self.lsm(dec_out)
-            next_token = torch.argmax(dec_out, dim=-1)
-            inputs = torch.cat([inputs, next_token], dim=-1)
-
-            for i in range(max_length):
-                dec_out = self.model.decode(enc_out, inputs)
+            for t in range(max_length):
+                dec_mask = torch.ones_like(inputs)
+                dec_out = self.model.decode(enc_out, inputs, enc_mask = src_mask, dec_mask = dec_mask)
                 dec_out = self.lsm(dec_out)[:, -1:, :] # Consider only last predicted token
-                next_token = torch.argmax(dec_out, dim=-1)
-                inputs = torch.cat([inputs, next_token], dim=-1)
+                next_tokens = torch.argmax(dec_out, dim=-1)
+                inputs = torch.cat([inputs, next_tokens], dim=-1)
+
+                for i in range(batch_size):
+                    if not eos_flags[i]:
+                        final_outputs[i, t] = next_tokens[i]
+
+                    # Update EOS flags where EOS is generated
+                    if next_tokens[i] == eos_token_id:
+                        eos_flags[i] = True
+
+                # Stop decoding early if all sequences have hit EOS
+                if eos_flags.all():
+                    break
+
+        if decode:
+            return tokenizer.batch_decode(final_outputs, skip_special_tokens=True)
        
-        return inputs
-
-
+        return final_outputs
 
