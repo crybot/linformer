@@ -216,14 +216,15 @@ class MultiHeadAttention(nn.Module):
 class LinformerAttention(MultiHeadAttention):
     """ Multi head attention with linear projections on K and V
     """
+    # TODO: rename k and sequence_length
     def __init__(self, *args, k: int, sequence_length: int, **kwargs):
         super().__init__(*args, **kwargs)
-        self.k = k
-        self.sequence_length = sequence_length
+        self.proj_dim = k
+        self.max_length = sequence_length
 
         # Using Linear so that it automatically handles initialization
-        self.E = nn.Linear(sequence_length, k, bias=False)
-        self.F = nn.Linear(sequence_length, k, bias=False)
+        self.E = nn.Linear(self.max_length, self.proj_dim, bias=False)
+        self.F = nn.Linear(self.max_length, self.proj_dim, bias=False)
 
     def forward(
             self,
@@ -254,14 +255,23 @@ class LinformerAttention(MultiHeadAttention):
             proj_k = self.E.weight
             proj_v = self.F.weight
 
-            if key.shape[1] < self.sequence_length:
+            if key.shape[1] < self.max_length:
                 proj_k = proj_k[:, :key.shape[1]]
                 proj_v = proj_v[:, :key.shape[1]]
 
             k = torch.matmul(proj_k, k)
             v = torch.matmul(proj_v, v)
 
-        attn = scaled_dot_product_attention(q, k, v, dim = self.inner_dim)
+        mask = None
+        # We mask the values of the projected activation matrix of size nxk.
+        # This is not equivalent to causal masking as in a standard SDPA, but
+        # it's a reasonable approximation.
+        if causal:
+            fill_value = torch.finfo(q.dtype).min
+            n = query.shape[1]
+            mask = torch.full((1, 1, n, self.proj_dim), fill_value, device=query.device).triu(diagonal=1)
+
+        attn = scaled_dot_product_attention(q, k, v, dim = self.inner_dim, attention_mask = mask)
 
         # Concatenate heads
         attn = rearrange(attn, 'b h n d -> b n (h d)')

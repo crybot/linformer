@@ -18,19 +18,11 @@ from utils import to_device, print_summary, set_random_state, download_wandb_che
 from utils import make_model
 import yaml
 import argparse
+from sacrebleu import corpus_bleu
 
 # TODO: Dropout as in the paper
 
 # TODO: Label smoothing
-
-# TODO: Implement BLEU metric
-
-# NOTE: BLEU needs to be computed from a candidate translation against a (set
-# of) reference ones. The problem is that the candidate has to be
-# autoregressively computed and this might take a while. Moreover this cannot
-# be computed in batches (or can it?) because of the variable length of each
-# production. We can defer this metric to a last evaluation step, not to be
-# computed as a validation step.
 
 # TODO: Move utility functions to an appropriate module
 
@@ -61,6 +53,12 @@ def seq2seq_perplexity(pred, inputs):
 
     tgt = tgt[tgt_mask]
     return perplexity(extract_probs(pred, tgt))
+
+def bleu_score(model, tokenizer, inputs):
+    src, _, tgt, src_mask, _, tgt_mask = encoder_decoder_inputs(*inputs)
+    candidate = model.generate(src, tokenizer, max_length = 100, src_mask = src_mask)
+    reference = tokenizer.batch_decode(tgt, skip_special_tokens=True) # TODO: maybe need to unsqueeze(1)?
+    return torch.tensor(corpus_bleu(candidate, reference).score).mean()
 
 def encoder_decoder_inputs(src, tgt, src_mask, tgt_mask):
     """ Return the appropriate inputs for an encoder-decoder model:
@@ -111,6 +109,23 @@ class CustomTrainingLoop(TrainingLoop):
 
         return pred, loss
 
+# TODO: progress bar
+class CustomWandbCallback(WandbCallback):
+    """ WandbCallback but with a call to TrainingLoop.evaluate()
+        at the end of training.
+    """
+    def __init__(self, metrics, *args, use_test = False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.metrics = metrics
+        self.use_test = use_test
+
+    def on_train_end(self, state):
+        test_metrics = state.evaluate(self.metrics, use_test = self.use_test, verbose = True)
+        for metric, value in test_metrics.items():
+            print(f'{metric}: {value.item()}')
+        super().on_train_end(state)
+
+
 def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
     inputs = to_device(*inputs, device=device)
     enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
@@ -123,13 +138,11 @@ def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
 
     loss.backward()
 
-
 def load_config(path: str) -> dict:
     with open(path, 'r') as f:
         return yaml.safe_load(f)
 
 def parse_args():
-    # Initialize the argument parser
     parser = argparse.ArgumentParser(description="Script with --checkpoint flag")
     parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
     return parser.parse_args()
@@ -156,16 +169,32 @@ def main():
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
+    # dataset = CSVDataset(
+    #         './HLT/datasets/wmt14-050-tokenized-256.npz',
+    #         from_dump=True
+    #         )
+
     dataset = CSVDataset(
-            './HLT/datasets/wmt14-050-tokenized-256.npz',
-            from_dump=True
+            './HLT/datasets/wmt14_translate_de-en_test.csv',
+            src_key = 'en',
+            tgt_key='de',
+            tokenizer=tokenizer,
+            padding='max_length',
+            max_length=config['dataset']['max_length'],
+            truncation=True,
+            device='cpu'
             )
 
-    wandb_callback = WandbCallback(
+    wandb_callback = CustomWandbCallback(
             project_name='HLT',
             entity='marco-pampaloni',
             config=config,
-            tags=['test']
+            tags=['test'],
+            metrics = {
+                'perplexity': seq2seq_perplexity,
+                'bleu': lambda pred, inputs: bleu_score(model, tokenizer, inputs)
+                },
+            use_test = False
             )
     checkpoint_callback = CheckpointCallback(
             path=ARTIFACTS_PATH + '/checkpoint.pt',
@@ -184,6 +213,7 @@ def main():
 
     # TODO: val_dataset batchs_size (no backward phase, so can be 2-3x bigger)
     training_loop = CustomTrainingLoop(
+            model,
             dataset,
             loss_fn,
             optimizer,
@@ -197,10 +227,12 @@ def main():
             device = device,
             num_workers = 4,
             pad_token_id = tokenizer.pad_token_id,
-            val_metrics = {'perplexity': seq2seq_perplexity},
+            val_metrics = {
+                'perplexity': seq2seq_perplexity
+                },
             callbacks = [
-                wandb_callback,
-                checkpoint_callback,
+                # wandb_callback,
+                # checkpoint_callback,
                 lr_scheduler_callback,
                 ProgressbarCallback(epochs=epochs, width=20)
                 ]
@@ -208,14 +240,14 @@ def main():
 
     print_summary(model, print_model=True)
 
-    # TODO: project name, user and checkpoint filename
+    # TODO: project name and checkpoint filename
     if args.checkpoint:
         print(f'Checkpoint path provided: {args.checkpoint}')
         print(f'Resuming...')
         checkpoint = download_wandb_checkpoint(f'HLT/{args.checkpoint}', 'checkpoint.pt', device=device)
         training_loop.load_state(model, checkpoint)
 
-    training_loop.run(model, epochs=epochs)
+    model = training_loop.run(epochs=epochs)
 
 if __name__ == '__main__':
     main()

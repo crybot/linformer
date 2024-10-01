@@ -53,6 +53,12 @@ class TrainingCallback(ABC):
     def on_validation_end(self, state):
         return
 
+    def on_evaluation_start(self, state):
+        return
+
+    def on_evaluation_end(self, state):
+        return
+
 class ProgressbarCallback(TrainingCallback):
     kbar: pkbar.Kbar
 
@@ -274,6 +280,10 @@ class WandbCallback(TrainingCallback):
         if self.log:
             wandb.log({**state.get_states(), **state.get_last_metrics()}, commit=True)
 
+    def on_evaluation_end(self, state):
+        super().on_evaluation_end(state)
+        if self.log:
+            wandb.log({**state.get_states(), **state.get_last_metrics()}, commit=True)
 
 class CheckpointCallback(TrainingCallback):
     def __init__(self, path, save_best=True, detect_anomaly=False, metric='val_loss', frequency=None, mode='min', sync_wandb=False, debug=False):
@@ -355,39 +365,3 @@ class CheckpointCallback(TrainingCallback):
         # Sync file with wandb
         if self.sync_wandb:
             wandb.save(self.path, base_path=os.path.dirname(self.path))
-
-
-class SanityCheckCallback(TrainingCallback):
-    def __init__(self, data, descriptors=None, transform=None, target_transform=None):
-        self.data = data
-        self.descriptors = descriptors
-        self.transform = transform
-        self.target_transform = target_transform
-
-        if self.transform:
-            self.data = [self._rebatch(self.transform(x[0], aux[0])) for (x, aux) in self.data]
-
-        self.data = self._make_tensors(self.data)
-
-    def _rebatch(self, data):
-        return (np.expand_dims(data[0], 0), np.expand_dims(data[1], 0))
-
-    def _make_tensors(self, data):
-        return [(torch.from_numpy(x), torch.from_numpy(aux)) for (x, aux) in data]
-
-    def state_dict(self):
-        return {}
-
-    def load_state_dict(self, state_dict):
-        pass
-
-    def on_train_epoch_end(self, state):
-        h = state.predict(self.data)
-        if self.descriptors is not None:
-            samples = zip(self.descriptors, self.data, h)
-        else:
-            samples = enumerate(zip(self.data, h))
-        for (i, x, y) in samples:
-            if self.target_transform:
-                y = self.target_transform(y)
-            print(f'{i}: {y}')

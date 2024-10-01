@@ -14,28 +14,31 @@ def make_optimizer(optimizer_init: callable, *args, **kwargs):
 
 # TODO: args filter for evaluation metrics
 class TrainingLoop():
-    def __init__(self,
-                 dataset,
-                 loss_fn,
-                 # optimizer_fn,
-                 optimizer,
-                 train_p=0.7,
-                 val_p=0.15,
-                 test_p=0.15,
-                 random_split=True,
-                 batch_size=1024,
-                 shuffle=False,
-                 random_subsampling=None,
-                 filter_fn=None,
-                 num_workers=4,
-                 mixed_precision=False,
-                 loss_arg_filter=None,
-                 pin_memory=True,
-                 callbacks=[],
-                 val_metrics={},
-                 device='cpu',
-                 seed=42):
-        
+    def __init__(
+            self,
+            model,
+            dataset,
+            loss_fn,
+            # optimizer_fn,
+            optimizer,
+            train_p=0.7,
+            val_p=0.15,
+            test_p=0.15,
+            random_split=True,
+            batch_size=1024,
+            shuffle=False,
+            random_subsampling=None,
+            filter_fn=None,
+            num_workers=4,
+            mixed_precision=False,
+            loss_arg_filter=None,
+            pin_memory=True,
+            callbacks=[],
+            val_metrics={},
+            device='cpu',
+            seed=42):
+
+        self.model = model
         self.dataset = dataset
         self.loss_fn = loss_fn
         # self.optimizer_fn = optimizer_fn
@@ -55,7 +58,6 @@ class TrainingLoop():
         self.pin_memory = pin_memory
         self.callbacks = callbacks
         self.val_metrics = val_metrics
-        self.device = device
         self.seed = 42
 
         # Pytorch auto scaler for mixed precision training (no-ops if not enabled)
@@ -110,7 +112,7 @@ class TrainingLoop():
                 # worker_init_fn=dataset.worker_init_fn,
                 persistent_workers=False)
         val_dl = dataloader_fn(val_ds,
-                batch_size=self.batch_size,
+                batch_size=self.batch_size*2,
                 collate_fn=self._collate_fn,
                 shuffle=False,
                 pin_memory=self.pin_memory,
@@ -183,13 +185,15 @@ class TrainingLoop():
 
         self.on_train_end()
 
-    def _test(self, dataloader, metrics):
+    def _test(self, dataloader, metrics, verbose = False):
         num_batches = len(dataloader)
         self.model.eval()
         test_loss = 0.0
         test_metrics = dict.fromkeys(metrics.keys(), 0.0)
         with torch.no_grad():
             for batch, inputs in enumerate(dataloader):
+                if verbose:
+                    print(f'Processing batch: {batch + 1}/{num_batches}')
                 inputs = self.preprocess_batch(inputs)
                 pred, loss = self.forward(inputs)
                 loss = loss.detach()
@@ -220,8 +224,8 @@ class TrainingLoop():
 
         return h
     
-    def run(self, model, epochs=10, verbose=1):
-        self.model = model.to(self.device)
+    def run(self, epochs=10, verbose=1):
+        # self.model = model.to(self.device)
         # self.optimizer = self.optimizer_fn(self.model)
         self.update_state('verbose', verbose)
         try:
@@ -346,8 +350,19 @@ class TrainingLoop():
         for metric, value in other_metrics.items():
             self.update_metric(f'val_{metric}', value)
         for c in self.callbacks: c.on_validation_end(self)
+    
+    def on_evaluation_end(self, test_loss, other_metrics):
+        self.update_metric('test_loss', test_loss)
+
+        for metric, value in other_metrics.items():
+            self.update_metric(f'test_{metric}', value)
+        for c in self.callbacks: c.on_evaluation_end(self)
 
     # TODO: maybe use an other class for evaluation?
-    def evaluate(self):
-        loss, other_metrics = self._test(self.test_dataloader, self.val_metrics)
+    # TODO: verbose
+    def evaluate(self, metrics, use_test = True, verbose = False):
+        with torch.autocast(device_type=self.device, enabled=self.mixed_precision):
+            loss, other_metrics = self._test(self.test_dataloader if use_test else self.val_dataloader, metrics, verbose=verbose)
+
+        self.on_evaluation_end(loss, other_metrics)
         return {'loss': loss, **other_metrics}
