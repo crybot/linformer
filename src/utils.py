@@ -42,13 +42,16 @@ def make_model(config: dict, device='cpu') -> nn.Module:
     n_layers = config['n_layers']
     vocab_size = config['vocab_size']
 
-    if config.get('type', None) == 'Linformer':
-        attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
+    dec_attn = MultiHeadAttention(dim, n_heads)
+    if config.get('type') == 'Linformer':
+        enc_attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
+        dec_cross_attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
     else:
-        attn = MultiHeadAttention(dim, n_heads)
+        enc_attn = MultiHeadAttention(dim, n_heads)
+        dec_cross_attn = MultiHeadAttention(dim, n_heads)
 
-    encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
-    decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, attn), n_layers=n_layers)
+    encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, enc_attn), n_layers=n_layers)
+    decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, dec_attn, cross_attention=dec_cross_attn), n_layers=n_layers)
 
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
     return LanguageModelingHead(transformer).to(device)

@@ -17,8 +17,6 @@ from typing import Optional, Union
 
 # TODO: define and annotate class parameters
 
-# TODO: linformer attention causal masking
-
 # TODO: MaskedTensor interface
 
 def scaled_dot_product_attention(
@@ -231,13 +229,16 @@ class LinformerAttention(MultiHeadAttention):
             query: Tensor,
             key: Tensor,
             value: Tensor,
-            causal: bool = False,
+            causal: bool = False, # here just for compatibility reasons
             key_mask: Tensor = None,
             query_mask: Tensor = None,
             full = False,
             ) -> Tensor:
         if (key_mask is None) != (query_mask is None):
-            raise ValueError("Either both key_mask and query_mask must be None, or both must be provided.")
+            raise ValueError('Either both key_mask and query_mask must be None, or both must be provided.')
+
+        if causal:
+            raise ValueError('Warning: causal masking is not supported by the Linformer attention')
 
         q, k, v = self._qkv_proj(query, key, value)
 
@@ -262,16 +263,7 @@ class LinformerAttention(MultiHeadAttention):
             k = torch.matmul(proj_k, k)
             v = torch.matmul(proj_v, v)
 
-        mask = None
-        # We mask the values of the projected activation matrix of size nxk.
-        # This is not equivalent to causal masking as in a standard SDPA, but
-        # it's a reasonable approximation.
-        if causal:
-            fill_value = torch.finfo(q.dtype).min
-            n = query.shape[1]
-            mask = torch.full((1, 1, n, self.proj_dim), fill_value, device=query.device).triu(diagonal=1)
-
-        attn = scaled_dot_product_attention(q, k, v, dim = self.inner_dim, attention_mask = mask)
+        attn = scaled_dot_product_attention(q, k, v, dim = self.inner_dim)
 
         # Concatenate heads
         attn = rearrange(attn, 'b h n d -> b n (h d)')
@@ -356,6 +348,7 @@ class TransformerDecoderLayer(nn.Module):
             dim: int,
             mlp_dim: int,
             attention: nn.Module,
+            cross_attention: nn.Module = None,
             ) -> None:
         super().__init__()
         self.dim = dim
@@ -365,7 +358,15 @@ class TransformerDecoderLayer(nn.Module):
             attention = MultiHeadAttention(dim, n_heads = 8, inner_dim = dim // 8)
 
         self.self_attention = attention
-        self.cross_attention = copy.deepcopy(attention)
+
+        # The user can provide a different attention mechanism for the
+        # cross-attention: this is useful in cases in which faster attention
+        # mechanism cannot be applied to decoding self-attentions because they
+        # are not compatible with causal masking (e.g. Linformer)
+        if cross_attention:
+            self.cross_attention = copy.deepcopy(cross_attention)
+        else:
+            self.cross_attention = copy.deepcopy(attention)
 
         self.norm1 = nn.LayerNorm(dim)
         self.norm2 = nn.LayerNorm(dim)

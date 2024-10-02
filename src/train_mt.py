@@ -169,21 +169,21 @@ def main():
     loss_fn = nn.NLLLoss(reduction='mean').to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
-    # dataset = CSVDataset(
-    #         './HLT/datasets/wmt14-050-tokenized-256.npz',
-    #         from_dump=True
-    #         )
-
     dataset = CSVDataset(
-            './HLT/datasets/wmt14_translate_de-en_test.csv',
-            src_key = 'en',
-            tgt_key='de',
-            tokenizer=tokenizer,
-            padding='max_length',
-            max_length=config['dataset']['max_length'],
-            truncation=True,
-            device='cpu'
+            './HLT/datasets/wmt14-050-tokenized-256.npz',
+            from_dump=True
             )
+
+    # dataset = CSVDataset(
+    #         './HLT/datasets/wmt14_translate_de-en_test.csv',
+    #         src_key = 'en',
+    #         tgt_key='de',
+    #         tokenizer=tokenizer,
+    #         padding='max_length',
+    #         max_length=config['dataset']['max_length'],
+    #         truncation=True,
+    #         device='cpu'
+    #         )
 
     wandb_callback = CustomWandbCallback(
             project_name='HLT',
@@ -231,8 +231,8 @@ def main():
                 'perplexity': seq2seq_perplexity
                 },
             callbacks = [
-                # wandb_callback,
-                # checkpoint_callback,
+                wandb_callback,
+                checkpoint_callback,
                 lr_scheduler_callback,
                 ProgressbarCallback(epochs=epochs, width=20)
                 ]
