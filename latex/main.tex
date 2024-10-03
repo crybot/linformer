@@ -1,0 +1,113 @@
+\documentclass[titlepage]{article}
+\usepackage{authblk} % for \affil (affiliations)
+\usepackage[backend=biber, sorting=none]{biblatex}
+\usepackage[margin=4cm]{geometry}
+\usepackage{booktabs} % For clean table rules
+\usepackage{amsmath} % For mathematical typesetting
+\usepackage{amsfonts}
+
+\addbibresource{biblio.bib}
+
+\title{Evaluating Linformer's performance on the WMT14 EN-DE machine
+translation task}
+\author{Marco Pampaloni}
+\affil{Department of Computer Science}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+The Transformer architecture, since its introduction in
+2017~\cite{vaswani2017}, has revolutionized the field of natural language
+processing (NLP), reaching state of the art in various downstream tasks.
+Despite its massive parallelism capabilities, the Transformer struggles with
+longer sequence lengths due to its attention mechanism, which scales
+quadratically with the number of input tokens. This is a problem at both
+training and inference time.
+
+For this reason, there has been a huge research effort in these years to
+develop faster attention mechanisms, either exploiting the IO properties of the
+hardware these models run on~\cite{flashAttention2022}, or by approximating the
+result of scaled dot product attention (SDPA).
+
+The \emph{Linformer} architecture~\cite{linformer2020} is an example of the
+latter approach. The authors first empirically show that the attention matrix
+is often low-rank, meaning that it could be approximated with an SVD
+decomposition by only keeping the singular values with larger magnitude. This
+would of course introduce additional asymptotical complexity to the method, so
+the authors propose the adoption of linear projections on the keys and values
+matrices $K, V$ to reduce their dimensionality and drive the computational
+complexity of the attention mechanism from $O(n^2)$ to $O(k n)$.
+The authors further show that the choice of $k$ does not depend on the sequence
+length $n$, so that the scaling can be considered linear in $n$.
+
+The standard multi head attention (MHA) introduced by~\cite{vaswani2017} is computed as
+follows
+\begin{equation}
+  \begin{aligned}
+    \textrm{MultiHead}(Q, K, V) &= \textrm{Concat}(\textrm{head}_1, \dots, \textrm{head}_h) W^O \\
+    \textrm{where } \textrm{head}_i &= \textrm{Attention}(Q W^Q, K W^K, V W^V) \\
+    &= \underbrace{\textrm{softmax}\left(\frac{Q W^Q (K
+          W^K)^T}{\sqrt{d_{model}}}\right)}_{P_i} V W^V \\
+  \end{aligned}
+\end{equation}
+
+The Linformer attention first projects the key and value matrices into a
+dimension of space $\mathbb{R}^{k \times d}$ with projection matrices $E, F \in
+\mathbb{R}^{k \times n}$ and then computes MHA as before:
+
+\begin{equation}
+  \overline{\textrm{head}}_i = \textrm{Attention}\left( Q, E_i K W_i^K, F_i V
+    W_i^V \right)
+\end{equation}
+
+This produces an attention matrix $\bar{P_i} \in \mathbb{R}^{n \times k}$,
+which is computed in time linear with $n$.
+Since the projection matrices $E, F$ are fixed in size before training, an
+obvious donwside of this approach is that the maximum sequence length $n$ has
+to be known beforehand and the model cannot then scale to inputs with more
+tokens than this value. One workaround is to set the maximum sequence length
+$n$ to a large number and handle shorter inputs by slicing the projection
+matrices along their columns before multiplying them with the inputs $K$ and
+$V$.
+
+\subsection{Masking}
+\subsubsection{Causal masking}
+
+\section{Prior work}
+
+\section{Data}
+
+\section{Architecture}
+
+\section{Experiments}
+
+\section{Results and Analysis}
+
+\subsection{Model performance}
+
+\begin{center}
+  \begin{tabular}{c c c}
+    \toprule
+    Model                 & PPL (dev) & BLEU (dev)  \\
+    \midrule
+    Transformer       & \bf{3.59} & \bf{26.7}   \\
+    Linformer (k=32)  & -         & -           \\
+    Linformer (k=64)  & -         & -           \\
+    \bottomrule
+  \end{tabular}
+\end{center}
+
+\subsection{Training time}
+
+\subsection{Inference time}
+
+\section{Conclusions}
+
+\section*{Bibliography}
+\nocite{*}
+\printbibliography
+\end{document}
