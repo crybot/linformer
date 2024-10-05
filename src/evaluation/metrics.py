@@ -13,7 +13,7 @@ def n_grams(tokens: Tensor, n: int) -> Tensor:
 def perplexity(target_log_probs: Tensor) -> Tensor:
     # (B, N, Z) where Z is the vocabulary size
     # -> sum over sequence dimension (N)
-    return torch.exp(-torch.mean(target_log_probs))
+    return torch.exp(-torch.mean(target_log_probs, dim=-1))
 
 def bleu_score(candidate: Tensor, target: Tensor, max_n: int = 4):
     raise NotImplementedError("Not implemented")

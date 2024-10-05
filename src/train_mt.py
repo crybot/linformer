@@ -18,67 +18,19 @@ from utils import to_device, print_summary, set_random_state, download_wandb_che
 from utils import make_model
 import yaml
 import argparse
-from sacrebleu import corpus_bleu
+from text.utils import trim_batch_pad_tokens, encoder_decoder_inputs
 
 # TODO: Dropout as in the paper
-
 # TODO: Label smoothing
 
-# TODO: Move utility functions to an appropriate module
-
-# TODO: generalize
-def multiple_eight(n: int) -> int:
-    return (n + 7) // 8 * 8
-
-def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> int:
-    non_padded_mask = sequence != pad_token
-    # Sum along the sequence dimension (N) to count non-padding tokens for each sequence
-    lengths = non_padded_mask.sum(dim=1)
-
-    # Find the maximum length in the batch
-    return lengths.max().item()
-
-def trim_batch_pad_tokens(inputs: tuple[Tensor], pad_token: int = 1) -> Tensor:
-    src, tgt, src_mask, tgt_mask = inputs
-    max_src_length = max_non_padded_length(src, pad_token = pad_token)
-    max_tgt_length = max_non_padded_length(tgt, pad_token = pad_token)
-
-    src, src_mask = src[:, :max_src_length], src_mask[:, :max_src_length]
-    tgt, tgt_mask = tgt[:, :max_tgt_length], tgt_mask[:, :max_tgt_length]
-
-    return src, tgt, src_mask, tgt_mask
+def next_multiple(n: int, k: int) -> int:
+    return (n + k - 1) // k * k
 
 def seq2seq_perplexity(pred, inputs):
     _, _, tgt, _, _, tgt_mask = encoder_decoder_inputs(*inputs)
 
     tgt = tgt[tgt_mask]
     return perplexity(extract_probs(pred, tgt))
-
-def bleu_score(model, tokenizer, inputs):
-    src, _, tgt, src_mask, _, tgt_mask = encoder_decoder_inputs(*inputs)
-    candidate = model.generate(src, tokenizer, max_length = 100, src_mask = src_mask)
-    reference = tokenizer.batch_decode(tgt, skip_special_tokens=True) # TODO: maybe need to unsqueeze(1)?
-    return torch.tensor(corpus_bleu(candidate, reference).score).mean()
-
-def encoder_decoder_inputs(src, tgt, src_mask, tgt_mask):
-    """ Return the appropriate inputs for an encoder-decoder model:
-
-        Expected arguments:
-        - src:        source sequence enclosed in <s> </s> possibly padded
-        - tgt:        target sequence enclosed in <s> </s> and possibly padded
-        - src_mask:   source mask
-        - tgt_mask:   target mask
-
-        Returns tuple containing in order:
-        - encoder input
-        - decoder input
-        - target sequence
-        - encoder input mask
-        - decoder input mask
-        - target mask
-    """
-    return src, tgt[..., :-1], tgt[..., 1:], src_mask.bool(), tgt_mask[..., :-1].bool(), tgt_mask[..., 1:].bool()
-
 
 class CustomTrainingLoop(TrainingLoop):
     def __init__(self, *args, pad_token_id: int = 1, **kwargs):
@@ -103,28 +55,14 @@ class CustomTrainingLoop(TrainingLoop):
         enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
         pred = self.model(enc_in, dec_in, enc_mask, dec_mask, log=True)
 
+        # Only take output distributions for non-masked tokens: this flattens
+        # the tensor so that pred has shape (B * N * self.model.classes) where
+        # N is the total number of non masked tokens.
         pred = pred[tgt_mask]
         tgt = tgt[tgt_mask].reshape(-1)
         loss = self.loss_fn(pred.view(-1, self.model.classes), tgt)
 
         return pred, loss
-
-# TODO: progress bar
-class CustomWandbCallback(WandbCallback):
-    """ WandbCallback but with a call to TrainingLoop.evaluate()
-        at the end of training.
-    """
-    def __init__(self, metrics, *args, use_test = False, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.metrics = metrics
-        self.use_test = use_test
-
-    def on_train_end(self, state):
-        test_metrics = state.evaluate(self.metrics, use_test = self.use_test, verbose = True)
-        for metric, value in test_metrics.items():
-            print(f'{metric}: {value.item()}')
-        super().on_train_end(state)
-
 
 def warmup_model(model: nn.Module, inputs, loss_fn, device='cpu'):
     inputs = to_device(*inputs, device=device)
@@ -161,7 +99,7 @@ def main():
             clean_up_tokenization_spaces=True,
             use_fast=False
             )
-    config['model']['vocab_size'] = multiple_eight(tokenizer.vocab_size)
+    config['model']['vocab_size'] = next_multiple(tokenizer.vocab_size, 8)
 
     print(config)
 
@@ -174,27 +112,11 @@ def main():
             from_dump=True
             )
 
-    # dataset = CSVDataset(
-    #         './HLT/datasets/wmt14_translate_de-en_test.csv',
-    #         src_key = 'en',
-    #         tgt_key='de',
-    #         tokenizer=tokenizer,
-    #         padding='max_length',
-    #         max_length=config['dataset']['max_length'],
-    #         truncation=True,
-    #         device='cpu'
-    #         )
-
-    wandb_callback = CustomWandbCallback(
+    wandb_callback = WandbCallback(
             project_name='HLT',
             entity='marco-pampaloni',
             config=config,
-            tags=['test'],
-            metrics = {
-                'perplexity': seq2seq_perplexity,
-                'bleu': lambda pred, inputs: bleu_score(model, tokenizer, inputs)
-                },
-            use_test = False
+            tags=['test']
             )
     checkpoint_callback = CheckpointCallback(
             path=ARTIFACTS_PATH + '/checkpoint.pt',
@@ -211,7 +133,6 @@ def main():
     epochs = config['training']['epochs']
     batch_size = config['training']['batch_size']
 
-    # TODO: val_dataset batchs_size (no backward phase, so can be 2-3x bigger)
     training_loop = CustomTrainingLoop(
             model,
             dataset,
@@ -240,7 +161,6 @@ def main():
 
     print_summary(model, print_model=True)
 
-    # TODO: project name and checkpoint filename
     if args.checkpoint:
         print(f'Checkpoint path provided: {args.checkpoint}')
         print(f'Resuming...')

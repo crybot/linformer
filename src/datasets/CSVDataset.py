@@ -83,10 +83,10 @@ class CSVDataset(Dataset):
 
                     i += 1
 
-                self.src = src_t
-                self.tgt = tgt_t
-                self.src_masks = src_masks_t
-                self.tgt_masks = tgt_masks_t
+                self.src = torch.from_numpy(src_t)
+                self.tgt = torch.from_numpy(tgt_t)
+                self.src_masks = torch.from_numpy(src_masks_t)
+                self.tgt_masks = torch.from_numpy(tgt_masks_t)
 
 
     def _tokenize_batch(self, src, tgt):

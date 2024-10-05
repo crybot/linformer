@@ -136,3 +136,48 @@ def mask_fill(model, input_ids: Tensor, masked_index = None, mask_token_id : int
         predictions[batch_idx].append(topk.indices)
 
     return predictions
+
+def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> int:
+    """ TODO """
+    non_padded_mask = sequence != pad_token
+    # Sum along the sequence dimension (N) to count non-padding tokens for each sequence
+    lengths = non_padded_mask.sum(dim=1)
+
+    # Find the maximum length in the batch
+    return lengths.max().item()
+
+def trim_batch_pad_tokens(inputs: tuple[Tensor], pad_token: int = 1) -> Tensor:
+    """ TODO """
+    src, tgt, src_mask, tgt_mask = inputs
+    max_src_length = max_non_padded_length(src, pad_token = pad_token)
+    max_tgt_length = max_non_padded_length(tgt, pad_token = pad_token)
+
+    src, src_mask = src[:, :max_src_length], src_mask[:, :max_src_length]
+    tgt, tgt_mask = tgt[:, :max_tgt_length], tgt_mask[:, :max_tgt_length]
+
+    return src, tgt, src_mask, tgt_mask
+
+def encoder_decoder_inputs(
+        src: Tensor,
+        tgt: Tensor,
+        src_mask: Tensor,
+        tgt_mask: Tensor
+        ) -> tuple[Tensor]:
+    """ Return the appropriate inputs for an encoder-decoder model:
+
+        Expected arguments:
+        - src:        source sequence enclosed in <s> </s> possibly padded
+        - tgt:        target sequence enclosed in <s> </s> and possibly padded
+        - src_mask:   source mask
+        - tgt_mask:   target mask
+
+        Returns tuple containing in order:
+        - encoder input
+        - decoder input
+        - target sequence
+        - encoder input mask
+        - decoder input mask
+        - target mask
+    """
+    return src, tgt[..., :-1], tgt[..., 1:], src_mask.bool(), tgt_mask[..., :-1].bool(), tgt_mask[..., 1:].bool()
+
