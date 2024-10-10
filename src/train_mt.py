@@ -81,7 +81,7 @@ def load_config(path: str) -> dict:
         return yaml.safe_load(f)
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Script with --checkpoint flag")
+    parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
     return parser.parse_args()
 

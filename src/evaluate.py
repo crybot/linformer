@@ -54,7 +54,7 @@ def evaluate(model, dataset, tokenizer):
     return bleu, ppl
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Script with --checkpoint flag")
+    parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
     return parser.parse_args()
 

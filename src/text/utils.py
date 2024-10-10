@@ -1,9 +1,10 @@
 import torch
 from torch import Tensor
-from typing import Union
+from typing import Optional, Union
+from torch.types import Number
 import numpy as np
 
-def pad_positions(tokens: Tensor, pad_token_id: int) -> tuple[Tensor]:
+def pad_positions(tokens: Tensor, pad_token_id: int) -> tuple[Tensor, ...]:
     """ 
     Return positions of pad_token_id over the input tokens tensor as a tuple of
     tensors, one for each input dimension.
@@ -30,7 +31,7 @@ def random_text_extract(
         max_periods: int = 3,
         max_length: int = 150,
         max_retries: int = 3
-        ) -> list[str]:
+        ) -> str:
     """
     Return a random contigous extract of the original input text.
     """
@@ -48,7 +49,7 @@ def random_text_extract(
             break
 
     if period_length > max_length and retries == max_retries:
-        raise Error(f"Could not find a period shorter than {max_length} words")
+        raise ValueError(f"Could not find a period shorter than {max_length} words")
 
     total_length = period_length
     extract = [start]
@@ -119,7 +120,12 @@ def random_mask(
 
     return masked, mask_positions.nonzero(as_tuple=False)
 
-def mask_fill(model, input_ids: Tensor, masked_index = None, mask_token_id : int = None, top_k: int = 5) -> list[Tensor]:
+def mask_fill(
+        model,
+        input_ids: Tensor,
+        masked_index = None,
+        mask_token_id : Optional[int] = None,
+        top_k: int = 5) -> list[list[Tensor]]:
     """
     Return a (batched) list of the most probable predictions for a masked input.
     """
@@ -137,7 +143,7 @@ def mask_fill(model, input_ids: Tensor, masked_index = None, mask_token_id : int
 
     return predictions
 
-def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> int:
+def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> Number:
     """ TODO """
     non_padded_mask = sequence != pad_token
     # Sum along the sequence dimension (N) to count non-padding tokens for each sequence
@@ -146,7 +152,10 @@ def max_non_padded_length(sequence: Tensor, pad_token: int = 1) -> int:
     # Find the maximum length in the batch
     return lengths.max().item()
 
-def trim_batch_pad_tokens(inputs: tuple[Tensor], pad_token: int = 1) -> Tensor:
+def trim_batch_pad_tokens(
+        inputs: tuple[Tensor, Tensor, Tensor, Tensor],
+        pad_token: int = 1
+        ) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     """ TODO """
     src, tgt, src_mask, tgt_mask = inputs
     max_src_length = max_non_padded_length(src, pad_token = pad_token)
@@ -162,7 +171,7 @@ def encoder_decoder_inputs(
         tgt: Tensor,
         src_mask: Tensor,
         tgt_mask: Tensor
-        ) -> tuple[Tensor]:
+        ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
     """ Return the appropriate inputs for an encoder-decoder model:
 
         Expected arguments:

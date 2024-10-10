@@ -101,3 +101,8 @@ def load_model_from_wandb_checkpoint(
     model.load_state_dict(checkpoint['model_state_dict'])
 
     return model
+
+def load_config(path: str) -> dict:
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
