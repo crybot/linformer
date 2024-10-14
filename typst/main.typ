@@ -96,18 +96,36 @@ Sections #link(<sec:training>)[7.2] and #link(<sec:inference>)[7.3].
 #strong[TODO]
 
 = Data <data>
-#strong[TODO]
+As in @vaswani2017, we used the WMT14 EN-DE @bojar-etal-2014-findings dataset comprised of about 4.5 million sencente pairs. For ease of use, we
+used the data hosted on a Kaggle repository
+#footnote("https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german"), which conveniently collects all the
+english to german sentences in a single CSV file for training. Additionally, a validation (dev) and test dataset are
+provided. The validation set has not been used.
 
-- Tokenizer used: BART byte-encoding \~50k vocab size
-- Dataset description (WMT14 EN-DE): 50% used for memory reasons
-- Max length set to 256
-- Padding on the right
-- Padding trimmed within batches
+Because of resources constraints, we could note use or preprocess the entire dataset while keeping it in memory.
+Applying preprocessing on the fly during training would have slowed down the experiment significantly, rendering its
+results meaningless. Instead, we used half of the original training dataset and used the last 1% of it as a validation
+set.
+
+We used the pretrained Huggingface #footnote("https://www.huggingface.co") implementation of the BART @bart2019
+tokenizer, which employs Byte Pair Encoding (BPE) and was applied to the dataset prior to training as a preprocessing
+step. The vocabulary of the tokenizer included about 50k tokens, in contrast to the vocabulary size of 37k from
+@vaswani2017. We truncated each sentence in the dataset to 256 tokens, padding on the right when necessary to enable
+training in batches. Each batch is randomly sampled from the training dataset and trimmed to the length of the longest
+non-padded sequence within the batch, significantly improving performance for batches with many short sequences (and,
+consequently, a high number of <pad> tokens).
+
+The validation dataset is only used to log metrics during training and for scheduling the learning rate. The test
+dataset is instead used during the last evaluation step of each experiment.
+
+#strong[TODO]
 - Average sequence length in training dataset
-- Training, validation, test split
-- Use of test dataset
 
 = Architecture <architecture>
+
+- Multiples of 8 to exploit tensor cores.
+
+
 = Hardware <hardware>
 == CPU bound <cpu-bound>
 = Experiments <experiments>
