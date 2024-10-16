@@ -123,27 +123,78 @@ dataset is instead used during the last evaluation step of each experiment.
 
 = Architecture <architecture>
 
-- Multiples of 8 to exploit tensor cores.
+This work focused on two architectures: the vanilla Transformer model and the Linformer. Both employed an
+encoder-decoder structure following @vaswani2017:
+
+- 6 stacked encoder layers composed by Multi-Head self-attention, followed by a pointwise multi layer perceptron;
+- #box[6 stacked decoder layers composed by Masked Multi-Head self-attention, followed by Multi-Head cross-attention and
+a pointwise multi layer perceptron.]
+
+In the standard Transformer model, each attention layer employs the scaled dot-product attention (SDPA) introduced by
+@vaswani2017, both for the encoder's self-attention and the decoder's self-attention and cross-attention.
+The Linformer instead uses the linearized attention mechanism proposed by @linformer2020 everywhere except in the
+self-attention stage of the decoder's layers, because of causality requirements (See @causal-masking).
+
+Both the standard Transformer and the Linformer adopt residual connections and Layer Normalization applied after each
+attention block and feed forward layer as in @vaswani2017. Sinusoidal positional encoding and learned embeddings have
+been used for both architectures.
+
+@tab-hyper shows the hyperparameters that have been set for both models, including every variant of Linformer tested.
+
+#figure(
+  [
+    #table(
+      columns: 3,
+      [Hyperparameter], [Value], [Description],
+      [$d_"model"$], [512], [Size of each embedding vector],
+      [$h$], [8], [Number of heads in multi-head attention (MHA)],
+      [$d_k, d_v$], [64], [Inner dimension of key and value vectors per head],
+      [$d_"mlp"$], [2048], [Hidden layer dimension of each pointwise MLP]
+    )
+  ],
+  caption: [Hyperparameters shared by the tested models]
+) <tab-hyper>
+
+// - $d_"model" = 512$: the size of each embedding vector;
+// - $h = 8$: the number of heads in MHA;
+// - $d_k = d_v = d_"model" / h = 64$: the inner dimension of key and value vectors for each head in MHA;
+// - $d_"mlp" = 2048$: the hidden layer dimension of each pointwise MLP.
+
+One last notable change made to the architectures is the choice of the vocabulary size: BART
+tokenizer's vocabulary has been resized to the next multiple of 8 in order to fully exploit the Tensor Cores
+#footnote[tensor cores: #strong[TODO]] of the Nvidia GPU (See @hardware) used during training, which accelerate matrix products when
+their sizes are divisible by 8.
+
+#strong[TODO]:
+- Architecture diagram
+
+#import "@preview/cetz:0.3.0"
+
+#cetz.canvas({
+  import cetz.draw: *
+  rect((0, 0), (2, 1), radius: 0.1, fill: orange, name: "enc-mha")
+  content((rel: (-1, -0.5)), [Hello World])
+})
 
 
 = Hardware <hardware>
 == CPU bound <cpu-bound>
+
 = Experiments <experiments>
 == Docker container (NVCR) <docker-container-nvcr>
 == Mixed precision training <mixed-precision-training>
+
 = Results and Analysis <results-and-analysis>
 == Model performance <model-performance>
 #strong[TODO]
 
 #figure(
-  align(center)[#table(
+  [#table(
     columns: 3,
-    align: (col, row) => (center, center, center,).at(col),
-    inset: 6pt,
     [Model], [PPL (test)], [BLEU (test)],
     [Transformer], [#strong[3.41]], [29.92],
-    [Linformer (k\=32)], [3.96], [#strong[30.08]],
-    [Linformer (k\=64)], [3.84], [27.74],
+    [Linformer (k=32)], [3.96], [#strong[30.08]],
+    [Linformer (k=64)], [3.84], [27.74],
   )],
   caption: [Linformer performance against a vanilla Transformer model on the WMT14 EN-DE (test) dataset. The Linformer
   has slightly worse perplexity than the Transformer, but their BLEU scores are comparable.],
@@ -151,6 +202,17 @@ dataset is instead used during the last evaluation step of each experiment.
 
 == Training time <sec:training>
 == Inference time <sec:inference>
+#import "@preview/plotst:0.2.0": *
+
+// Graph line plot of inference time
+#{
+  let data = ((0, 0), (1, 2), (2, 4), (3, 6), (4, 8), (5, 3), (6, 6),(7, 9),(11, 12))
+  let x_axis = axis(min: 0, max: 11, step: 1, location: "bottom")
+  let y_axis = axis(min: 0, max: 13, step: 2, location: "left", helper_lines: true)
+  let pl = plot(axes: (x_axis, y_axis), data: data)
+  scatter_plot(pl, (100%, 33%))
+}
+
 = Conclusions <conclusions>
 
 #bibliography("biblio.bib")

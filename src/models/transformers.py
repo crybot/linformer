@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from einops import rearrange
 from text.positional_encoding import SinPosEncoding
-from tokenizers import Tokenizer
+from transformers import PreTrainedTokenizer
 from typing import Optional, Union
 
 # TODO: pipeline for data processing
@@ -391,7 +391,7 @@ class NLPTransformer(Transformer):
             *args,
             pos_encoding: nn.Module = SinPosEncoding(),
             embedding: nn.Module = None,
-            tokenizer: Tokenizer = None,
+            tokenizer: PreTrainedTokenizer = None,
             vocab_size: int = None,
             padding: bool = True,
             **kwargs
@@ -488,7 +488,7 @@ class LanguageModelingHead(PointwiseClassificationHead):
     def generate(
             self,
             src: Tensor,
-            tokenizer: Tokenizer,
+            tokenizer: PreTrainedTokenizer,
             inputs: Optional[Tensor] = None,
             src_mask: Optional[Tensor] = None,
             max_length: int = 200,
