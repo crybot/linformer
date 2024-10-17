@@ -204,13 +204,25 @@ their sizes are divisible by 8.
 == Inference time <sec:inference>
 #import "@preview/plotst:0.2.0": *
 
-// Graph line plot of inference time
+#let data = csv("./artifacts/perf_vanilla.csv", row-type: array)
+
+#table(
+  columns: data.at(0).len(),
+  ..data.at(0).flatten(), 
+  ..data.at(1).flatten().map(x => str(calc.round(float(x), digits: 2)))
+)
+
 #{
-  let data = ((0, 0), (1, 2), (2, 4), (3, 6), (4, 8), (5, 3), (6, 6),(7, 9),(11, 12))
-  let x_axis = axis(min: 0, max: 11, step: 1, location: "bottom")
-  let y_axis = axis(min: 0, max: 13, step: 2, location: "left", helper_lines: true)
-  let pl = plot(axes: (x_axis, y_axis), data: data)
-  scatter_plot(pl, (100%, 33%))
+// The data to be displayed
+let times = range(7).zip(data.at(1).map(x => float(x)))
+
+// Create the axes used for the chart 
+let x_axis = axis(min: 0, max: 7, step: 1, location: "bottom")
+let y_axis = axis(min: 0, max: 15, step: 2, location: "left", helper_lines: false)
+
+// Combine the axes and the data and feed it to the plot render function.
+let pl = plot(data: times, axes: (x_axis, y_axis))
+graph_plot(pl, 300pt)
 }
 
 = Conclusions <conclusions>
