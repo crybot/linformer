@@ -178,16 +178,34 @@ their sizes are divisible by 8.
 
 
 = Hardware <hardware>
+The experiments have been carried out locally on a system running a single Nvidia RTX 3090 GPU with 24GB of GDDR6X VRAM and an
+Intel i7 4770k CPU overclocked at 4.4GHz. The system's memory amounted to 16GB of DDR3 RAM.
 == CPU bound <cpu-bound>
+Given the dated system components, the experiments were bottlenecked by the CPU, which could not keep the GPU usage at
+100% most of the time during training, hovering near the 96-98% range of utilization instead.
+
+#strong[TODO]:
+- Show CPU/GPU utilization graph during training (wandb)
 
 = Experiments <experiments>
-== Docker container (NVCR) <docker-container-nvcr>
-== Mixed precision training <mixed-precision-training>
+
+#strong[TODO]:
+- Docker container (NVCR)
+- Mixed precision training
+- Weights and Biases
+- Logged metrics and validation
+- Training times (maybe drop later section)
 
 = Results and Analysis <results-and-analysis>
+The following section presents the performance results of Linformer variants against a standard Transformer on the WMT14
+EN-DE task.
 == Model performance <model-performance>
-#strong[TODO]
 
+@tab-performance shows that the Linformer performs comparably to the standard Transformer model on both tested metrics,
+scoring worse perplexities on the test dataset, but showing similar BLEU scores. Even though perplexity intuitively
+shrinks when increasing the parameter $k$, the BLEU score seems to worsen. This variation is somewhat expected since
+@vaswani2017 actually performed their BLEU evaluations on the test dataset with an ensemble of models computed by
+averaging many training checkpoints, ultimately lowering variance by a large margin.
 #figure(
   [#table(
     columns: 3,
@@ -198,7 +216,11 @@ their sizes are divisible by 8.
   )],
   caption: [Linformer performance against a vanilla Transformer model on the WMT14 EN-DE (test) dataset. The Linformer
   has slightly worse perplexity than the Transformer, but their BLEU scores are comparable.],
-) <tab:performance>
+) <tab-performance>
+
+#strong[TODO]:
+- Show perplexity validation curves
+- Show training and validation loss curves
 
 == Training time <sec:training>
 == Inference time <sec:inference>
