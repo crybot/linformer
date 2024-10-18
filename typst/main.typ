@@ -202,38 +202,63 @@ their sizes are divisible by 8.
 
 == Training time <sec:training>
 == Inference time <sec:inference>
-#import "@preview/plotst:0.2.0": *
 
-#let data = csv("./artifacts/perf_vanilla.csv", row-type: array)
+#import "@preview/cetz:0.3.0"
+#import "@local/cetz-plot:0.1.0": plot, chart
 
-#table(
-  columns: data.at(0).len(),
-  ..data.at(0).flatten(), 
-  ..data.at(1).flatten().map(x => str(calc.round(float(x), digits: 2)))
+// #let data = csv("./artifacts/perf_vanilla.csv", row-type: array)
+// #table(
+//   columns: data.at(0).len(),
+//   ..data.at(0).flatten(), 
+//   ..data.at(1).flatten().map(x => str(calc.round(float(x), digits: 2)))
+// )
+
+#let new_plot_data(labels: array, ..csv_files) = {
+  let data = ()
+  let ticks = none
+  for path in csv_files.pos() {
+    let times = csv(path, row-type: array)
+
+    // times.at(0) is the CSV index
+    let ys = times.at(1).map(x => float(x))
+    let xs = range(times.at(1).len())
+    ticks = xs.zip(times.at(0))
+    data.push(xs.zip(ys))
+  }
+
+  return cetz.canvas({
+    plot.plot(
+      size: (10,10),
+      x-label: "Seq. length / batch size",
+      y-label: "Time (s)",
+      x-tick-step: none,
+      y-tick-step: 2,
+      x-ticks: ticks, {
+        for i in range(data.len()) {
+          let label = none
+          if i < labels.len() { label = labels.at(i) }
+          plot.add(data.at(i), label: label, mark: "o")
+        }
+      })
+    })
+  }
+
+#figure(
+  scale(
+    new_plot_data(
+      labels: ("Transformer", "Linformer, k=32"),
+      "./artifacts/perf_vanilla.csv",
+      "./artifacts/perf_lin_k32.csv"
+    ), x: 85%, y: 85%
+  ),
+  caption: [Comparison of scaling times between Linformer and Transformer with an encoder-decoder architecture.
+  Different choices of the parameter $k$ result in the same scaling, with differences in execution time falling within margin of error.
+  This is because of the decoder's bottleneck which still requires the exact attention mechanism to be carried out.]
 )
 
-// Create the axes used for the chart 
-#let x_axis = axis(min: 0, max: 7, step: 1, location: "bottom")
-#let y_axis = axis(min: 0, max: 15, step: 2, location: "left", helper_lines: false)
-
-#let plot_data(csv_path, color: color) = {
-  // The data to be displayed
-  let data = csv(csv_path, row-type: array)
-  let times = range(7).zip(data.at(1).map(x => float(x)))
-
-  // Combine the axes and the data and feed it to the plot render function.
-  let pl = plot(data: times, axes: (x_axis, y_axis))
-  return graph_plot(pl, 300pt, stroke: color)
-}
-
-#let pl1 = plot_data("./artifacts/perf_vanilla.csv", color: blue)
-#let pl2 = plot_data("./artifacts/perf_lin_k32.csv", color: green)
-#let pl3 = plot_data("./artifacts/perf_lin_k64.csv", color: purple)
-#let pl4 = plot_data("./artifacts/perf_lin_k128.csv", color: black)
-
-#overlay((pl1, pl2, pl3, pl4), (300pt, 300pt))
 
 
 = Conclusions <conclusions>
 
 #bibliography("biblio.bib")
+
