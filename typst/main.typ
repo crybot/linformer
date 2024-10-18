@@ -212,18 +212,27 @@ their sizes are divisible by 8.
   ..data.at(1).flatten().map(x => str(calc.round(float(x), digits: 2)))
 )
 
-#{
-// The data to be displayed
-let times = range(7).zip(data.at(1).map(x => float(x)))
-
 // Create the axes used for the chart 
-let x_axis = axis(min: 0, max: 7, step: 1, location: "bottom")
-let y_axis = axis(min: 0, max: 15, step: 2, location: "left", helper_lines: false)
+#let x_axis = axis(min: 0, max: 7, step: 1, location: "bottom")
+#let y_axis = axis(min: 0, max: 15, step: 2, location: "left", helper_lines: false)
 
-// Combine the axes and the data and feed it to the plot render function.
-let pl = plot(data: times, axes: (x_axis, y_axis))
-graph_plot(pl, 300pt)
+#let plot_data(csv_path, color: color) = {
+  // The data to be displayed
+  let data = csv(csv_path, row-type: array)
+  let times = range(7).zip(data.at(1).map(x => float(x)))
+
+  // Combine the axes and the data and feed it to the plot render function.
+  let pl = plot(data: times, axes: (x_axis, y_axis))
+  return graph_plot(pl, 300pt, stroke: color)
 }
+
+#let pl1 = plot_data("./artifacts/perf_vanilla.csv", color: blue)
+#let pl2 = plot_data("./artifacts/perf_lin_k32.csv", color: green)
+#let pl3 = plot_data("./artifacts/perf_lin_k64.csv", color: purple)
+#let pl4 = plot_data("./artifacts/perf_lin_k128.csv", color: black)
+
+#overlay((pl1, pl2, pl3, pl4), (300pt, 300pt))
+
 
 = Conclusions <conclusions>
 
