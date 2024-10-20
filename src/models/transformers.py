@@ -8,24 +8,24 @@ from text.positional_encoding import SinPosEncoding
 from transformers import PreTrainedTokenizer
 from typing import Optional, Union
 
-# TODO: pipeline for data processing
+#TODO: pipeline for data processing
 
-# TODO: remove asserts and raise exceptions
+#TODO: remove asserts and raise exceptions
 
-# TODO: possibly integrate loss calculation within task heads (such as
+#TODO: possibly integrate loss calculation within task heads (such as
 # LanguageModelingHead)
 
-# TODO: define and annotate class parameters
+#TODO: define and annotate class parameters
 
-# TODO: MaskedTensor interface
+#TODO: MaskedTensor interface
 
 def scaled_dot_product_attention(
-        q: Tensor,
-        k: Tensor,
-        v: Tensor,
-        attention_mask: Optional[Tensor] = None,
-        dim = None
-        ) -> Tensor:
+    q: Tensor,
+    k: Tensor,
+    v: Tensor,
+    attention_mask: Optional[Tensor] = None,
+    dim = None
+) -> Tensor:
     if not dim:
         dim = k.shape[-1]
 
@@ -74,10 +74,10 @@ class Replicated(nn.Module):
         recursively.
     """
     def __init__(
-            self,
-            layer: nn.Module,
-            n_layers: int
-            ) -> None:
+        self,
+        layer: nn.Module,
+        n_layers: int
+    ) -> None:
         super().__init__()
         layers = [copy.deepcopy(layer) for i in range(n_layers)]
         self.stacked = nn.ModuleList(layers)
@@ -97,17 +97,17 @@ class MultiHeadAttention(nn.Module):
         Query, key and value vectors share the same dimension `dim`.
     """
     def __init__(
-            self,
-            dim: int,
-            n_heads: int,
-            inner_dim: int = None
-            ) -> None:
+        self,
+        dim: int,
+        n_heads: int,
+        inner_dim: int = None
+    ) -> None:
         super().__init__()
 
         self.dim = dim
         self.n_heads = n_heads
         self.inner_dim = inner_dim
-        
+
         if not self.inner_dim:
             self.inner_dim = dim // n_heads
 
@@ -137,14 +137,14 @@ class MultiHeadAttention(nn.Module):
         return q, k, v
 
     def forward(
-            self,
-            query: Tensor,
-            key: Tensor,
-            value: Tensor,
-            causal: bool = False,
-            key_mask: Tensor = None,
-            query_mask: Tensor = None,
-            ) -> Tensor:
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        causal: bool = False,
+        key_mask: Tensor = None,
+        query_mask: Tensor = None,
+    ) -> Tensor:
         if (key_mask is None) != (query_mask is None):
             raise ValueError("Either both key_mask and query_mask must be None, or both must be provided.")
 
@@ -225,15 +225,15 @@ class LinformerAttention(MultiHeadAttention):
         self.F = nn.Linear(self.max_length, self.proj_dim, bias=False)
 
     def forward(
-            self,
-            query: Tensor,
-            key: Tensor,
-            value: Tensor,
-            causal: bool = False, # here just for compatibility reasons
-            key_mask: Tensor = None,
-            query_mask: Tensor = None,
-            full = False,
-            ) -> Tensor:
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        causal: bool = False, # here just for compatibility reasons
+        key_mask: Tensor = None,
+        query_mask: Tensor = None,
+        full = False,
+    ) -> Tensor:
         if (key_mask is None) != (query_mask is None):
             raise ValueError('Either both key_mask and query_mask must be None, or both must be provided.')
 
@@ -276,32 +276,36 @@ class LinformerAttention(MultiHeadAttention):
         return attn
 
 class Transformer(nn.Module):
-    def __init__(self, encoder: nn.Module, decoder: nn.Module):
+    def __init__(self, encoder: nn.Module, decoder: Optional[nn.Module] = None):
+        """ TODO """
         super().__init__()
         self.encoder = encoder
         self.decoder = decoder
-
-        self.dim = self.encoder.dim if self.encoder else self.decoder.dim
+        self.dim = self.encoder.dim
 
     def forward(
-            self,
-            enc_in: Tensor,
-            dec_in: Tensor,
-            enc_mask: Tensor = None,
-            dec_mask: Tensor = None,
-            return_enc_output: bool = False,
-            ):
+        self,
+        enc_in: Tensor,
+        dec_in: Optional[Tensor] = None,
+        enc_mask: Optional[Tensor] = None,
+        dec_mask: Optional[Tensor] = None,
+        return_enc_output: bool = False,
+    ):
         enc_out = self.encoder(enc_in, mask = enc_mask)
-        dec_out = self.decoder(dec_in, enc_out, dec_mask = dec_mask, enc_mask = enc_mask)
 
-        if return_enc_output:
-            return enc_out, dec_out
+        if self.decoder is not None:
+            dec_out = self.decoder(dec_in, enc_out, dec_mask = dec_mask, enc_mask = enc_mask)
 
-        return dec_out
+            if return_enc_output:
+                return enc_out, dec_out
+            else:
+                return dec_out
+        return enc_out
 
     def reset_parameters(self) -> None:
         self.encoder.reset_parameters()
-        self.decoder.reset_parameters()
+        if self.decoder is not None:
+            self.decoder.reset_parameters()
 
 class TransformerEncoder(Replicated):
     def __init__(self,*args, causal: bool = False, **kwargs) -> None:
@@ -309,7 +313,7 @@ class TransformerEncoder(Replicated):
         self.causal = causal
         self.dim = self.stacked[0].dim
 
-    def forward(self, x: Tensor, mask: Tensor = None) -> Tensor:
+    def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         return super().forward(x, causal = self.causal, mask = mask)
 
 class TransformerEncoderLayer(nn.Module):
@@ -326,10 +330,10 @@ class TransformerEncoderLayer(nn.Module):
         self.norm2 = nn.LayerNorm(dim)
 
         self.mlp = nn.Sequential(
-                nn.Linear(dim, mlp_dim, bias = False),
-                nn.ReLU(),
-                nn.Linear(mlp_dim, dim, bias = False)
-                )
+            nn.Linear(dim, mlp_dim, bias = False),
+            nn.ReLU(),
+            nn.Linear(mlp_dim, dim, bias = False)
+        )
 
     def forward(self, x, causal = False, mask = None):
         x = self.norm1(self.attention(x, x, x, causal = causal, query_mask = mask, key_mask = mask) + x) # Norm first = False (original paper)
@@ -344,12 +348,12 @@ class TransformerDecoder(Replicated):
 
 class TransformerDecoderLayer(nn.Module):
     def __init__(
-            self,
-            dim: int,
-            mlp_dim: int,
-            attention: nn.Module,
-            cross_attention: nn.Module = None,
-            ) -> None:
+        self,
+        dim: int,
+        mlp_dim: int,
+        attention: nn.Module,
+        cross_attention: Optional[nn.Module] = None,
+    ) -> None:
         super().__init__()
         self.dim = dim
         self.mlp_dim = mlp_dim
@@ -373,10 +377,10 @@ class TransformerDecoderLayer(nn.Module):
         self.norm3 = nn.LayerNorm(dim)
 
         self.mlp = nn.Sequential(
-                nn.Linear(dim, mlp_dim, bias = False),
-                nn.ReLU(),
-                nn.Linear(mlp_dim, dim, bias = False)
-                )
+            nn.Linear(dim, mlp_dim, bias = False),
+            nn.ReLU(),
+            nn.Linear(mlp_dim, dim, bias = False)
+        )
 
     def forward(self, dec_out: Tensor, enc_out: Tensor, dec_mask: Tensor = None, enc_mask: Tensor = None) -> Tensor:
         dec_out = self.norm1(self.self_attention(dec_out, dec_out, dec_out, causal=True, query_mask = dec_mask, key_mask = dec_mask) + dec_out)
@@ -387,31 +391,33 @@ class TransformerDecoderLayer(nn.Module):
 
 class NLPTransformer(Transformer):
     def __init__(
-            self,
-            *args,
-            pos_encoding: nn.Module = SinPosEncoding(),
-            embedding: nn.Module = None,
-            tokenizer: PreTrainedTokenizer = None,
-            vocab_size: int = None,
-            padding: bool = True,
-            **kwargs
-            ) -> None:
+        self,
+        *args,
+        pos_encoding: nn.Module = SinPosEncoding(),
+        embedding: Optional[nn.Module] = None,
+        tokenizer: Optional[PreTrainedTokenizer] = None,
+        vocab_size: Optional[int] = None,
+        padding: bool = True,
+        **kwargs
+    ) -> None:
         super().__init__(*args, **kwargs)
         self.tokenizer = tokenizer
         self.pos_encoding = pos_encoding
-        self.embedding = embedding
         self.padding = padding
         self.vocab_size = vocab_size
 
-        # TODO: if tokenizer is None ??
+        #FIX: if tokenizer is None ??
         if not self.vocab_size:
             self.vocab_size = self.tokenizer.vocab_size
 
-        if not self.embedding:
+        if embedding is None:
             self.embedding = nn.Embedding(self.vocab_size, self.dim)
+        else:
+            self.embedding = embedding
 
-    def forward(self, src, tgt, src_mask = None, tgt_mask = None, device='cpu', **kwargs):
+    def forward(self, src, tgt = None, src_mask = None, tgt_mask = None, device='cpu', **kwargs):
         # Tokenization
+        #FIX: fix and test online tokenization (we don't really use it)
         if self.tokenizer:
             # TODO: return_tensors='pt': how to allocate them on device?
             tokenized_src = self.tokenizer(src, padding = self.padding)
@@ -429,18 +435,17 @@ class NLPTransformer(Transformer):
             dec_mask = torch.tensor(tokenized_tgt['attention_mask'], device=device)[..., :-1] # Drop last
             # TODO: compute tgt_mask for loss
 
-        # Already tokenized: preparing inputs and masks
+            # Already tokenized: preparing inputs and masks
         else:
             enc_in = src
             dec_in = tgt
 
-        # Embedding
+        # Embedding + Positional encoding
         enc_in = self.embedding(enc_in)
-        dec_in = self.embedding(dec_in)
-
-        # Positional encoding
         enc_in = self.pos_encoding(enc_in)
-        dec_in = self.pos_encoding(dec_in)
+        if self.decoder is not None:
+            dec_in = self.embedding(dec_in)
+            dec_in = self.pos_encoding(dec_in)
 
         pred = super().forward(enc_in, dec_in, enc_mask = src_mask, dec_mask = tgt_mask, **kwargs)
         return pred
@@ -453,11 +458,11 @@ class NLPTransformer(Transformer):
 
 class PointwiseClassificationHead(nn.Module):
     def __init__(
-            self,
-            model: nn.Module,
-            in_dim: int,
-            classes: int
-            ) -> None:
+        self,
+        model: nn.Module,
+        in_dim: int,
+        classes: int
+    ) -> None:
         super().__init__()
         self.model = model
         self.classes = classes
@@ -479,21 +484,21 @@ class PointwiseClassificationHead(nn.Module):
 
 class LanguageModelingHead(PointwiseClassificationHead):
     def __init__(
-            self,
-            model: NLPTransformer,
-            loss_fn: nn.Module = None,
-            ) -> None:
+        self,
+        model: NLPTransformer,
+        loss_fn: nn.Module = None,
+    ) -> None:
         super().__init__(model, model.dim, model.vocab_size)
 
     def generate(
-            self,
-            src: Tensor,
-            tokenizer: PreTrainedTokenizer,
-            inputs: Optional[Tensor] = None,
-            src_mask: Optional[Tensor] = None,
-            max_length: int = 200,
-            decode = True
-            ) -> Union[Tensor, list[str]]:
+        self,
+        src: Tensor,
+        tokenizer: PreTrainedTokenizer,
+        inputs: Optional[Tensor] = None,
+        src_mask: Optional[Tensor] = None,
+        max_length: int = 200,
+        decode = True
+    ) -> Union[Tensor, list[str]]:
         """ Implements a very rough version of greedy decoding """
         pad_token_id = tokenizer.pad_token_id
         bos_token_id = tokenizer.bos_token_id
@@ -533,6 +538,6 @@ class LanguageModelingHead(PointwiseClassificationHead):
 
         if decode:
             return tokenizer.batch_decode(final_outputs, skip_special_tokens=True)
-       
+
         return final_outputs
 

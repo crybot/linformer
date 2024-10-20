@@ -2,13 +2,12 @@ import os
 import csv
 import torch
 import argparse
-import numpy as np
 from torch import Tensor
 from utils import make_model
 from utils import load_config
 from timeit import timeit
 
-def random_data(batch_size, length, device = 'cpu') -> Tensor:
+def random_data(batch_size, length, device = 'cpu') -> tuple[Tensor, Tensor]:
     src = torch.randint(0, 50000, (batch_size, length), device=device)
     return src, src.clone()
 
@@ -34,7 +33,7 @@ def main(args):
 
             inference(model, batch_size, length, device=device) # warmup
 
-            time = timeit(lambda: inference(model, batch_size, length, device=device), number = 10)
+            time = timeit(lambda: inference(model, batch_size, length, device=device), number = 10) / 10
             times.append(time)
 
             print(f'n = {length}, batch size = {batch_size}')

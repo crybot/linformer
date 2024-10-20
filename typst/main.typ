@@ -1,3 +1,6 @@
+#import "@preview/cetz:0.3.0"
+#import "@local/cetz-plot:0.1.0": plot, chart
+
 #set heading(numbering: "1.")
 #set page(
   paper: "us-letter",
@@ -7,7 +10,7 @@
 #set par(justify: true)
 #set text(
   // font: "New Computer Modern",
-  size: 11pt,
+  size: 10pt,
 )
 
 #align(center, text(17pt)[
@@ -90,14 +93,14 @@ projections of the $K$ and $V$ matrices.
 The Linformer attention mechanism thus cannot be applied in the self-attention layers of the decoder, while it can
 safely be used in the cross-attention stages because of the lack of causal requirements. This hinders the full scaling
 potential of the encoder-decoder Linformer architecture, which is empirically shown in
-Sections #link(<sec:training>)[7.2] and #link(<sec:inference>)[7.3].
+Sections #link(<sec:training>)[7.2] and #link(<sec:inference>)[7.3]. // TODO: fix references
 
 = Prior work <prior-work>
 #strong[TODO]
 
 = Data <data>
-As in @vaswani2017, we used the WMT14 EN-DE @bojar-etal-2014-findings dataset comprised of about 4.5 million sencente pairs. For ease of use, we
-used the data hosted on a Kaggle repository
+As in @vaswani2017, we used the WMT14 EN-DE @bojar-etal-2014-findings dataset comprised of about 4.5 million sencente
+pairs. For ease of use, we used the data hosted on a Kaggle repository
 #footnote("https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german"), which conveniently collects all the
 english to german sentences in a single CSV file for training. Additionally, a validation (dev) and test dataset are
 provided. The validation set has not been used.
@@ -160,15 +163,13 @@ been used for both architectures.
 // - $d_k = d_v = d_"model" / h = 64$: the inner dimension of key and value vectors for each head in MHA;
 // - $d_"mlp" = 2048$: the hidden layer dimension of each pointwise MLP.
 
-One last notable change made to the architectures is the choice of the vocabulary size: BART
-tokenizer's vocabulary has been resized to the next multiple of 8 in order to fully exploit the Tensor Cores
-#footnote[tensor cores: #strong[TODO]] of the Nvidia GPU (See @hardware) used during training, which accelerate matrix products when
-their sizes are divisible by 8.
+One last notable change made to the architectures is the choice of the vocabulary size: BART tokenizer's vocabulary has
+been resized to the next multiple of 8 in order to fully exploit the Tensor Cores #footnote[tensor cores: #strong[TODO]]
+of the Nvidia GPU (See @hardware) used during training, which accelerate matrix products when their sizes are divisible
+by 8.
 
 #strong[TODO]:
 - Architecture diagram
-
-#import "@preview/cetz:0.3.0"
 
 #cetz.canvas({
   import cetz.draw: *
@@ -178,8 +179,8 @@ their sizes are divisible by 8.
 
 
 = Hardware <hardware>
-The experiments have been carried out locally on a system running a single Nvidia RTX 3090 GPU with 24GB of GDDR6X VRAM and an
-Intel i7 4770k CPU overclocked at 4.4GHz. The system's memory amounted to 16GB of DDR3 RAM.
+The experiments have been carried out locally on a system running a single Nvidia RTX 3090 GPU with 24GB of GDDR6X VRAM
+and an Intel i7 4770k CPU overclocked at 4.4GHz. The system's memory amounted to 16GB of DDR3 RAM.
 == CPU bound <cpu-bound>
 Given the dated system components, the experiments were bottlenecked by the CPU, which could not keep the GPU usage at
 100% most of the time during training, hovering near the 96-98% range of utilization instead.
@@ -225,17 +226,7 @@ averaging many training checkpoints, ultimately lowering variance by a large mar
 == Training time <sec:training>
 == Inference time <sec:inference>
 
-#import "@preview/cetz:0.3.0"
-#import "@local/cetz-plot:0.1.0": plot, chart
-
-// #let data = csv("./artifacts/perf_vanilla.csv", row-type: array)
-// #table(
-//   columns: data.at(0).len(),
-//   ..data.at(0).flatten(), 
-//   ..data.at(1).flatten().map(x => str(calc.round(float(x), digits: 2)))
-// )
-
-#let new_plot_data(labels: array, ..csv_files) = {
+#let new_plot_data(labels: (), tick-step: 1.0, decimals: 2, ..csv_files) = {
   let data = ()
   let ticks = none
   for path in csv_files.pos() {
@@ -250,34 +241,64 @@ averaging many training checkpoints, ultimately lowering variance by a large mar
 
   return cetz.canvas({
     plot.plot(
-      size: (10,10),
+      size: (8,5),
       x-label: "Seq. length / batch size",
       y-label: "Time (s)",
       x-tick-step: none,
-      y-tick-step: 2,
+      y-decimals: decimals,
+      y-tick-step: tick-step,
       x-ticks: ticks, {
         for i in range(data.len()) {
           let label = none
           if i < labels.len() { label = labels.at(i) }
           plot.add(data.at(i), label: label, mark: "o")
         }
-      })
-    })
-  }
+      }
+    )
+  })
+}
 
 #figure(
   scale(
     new_plot_data(
+      tick-step: auto,
       labels: ("Transformer", "Linformer, k=32"),
       "./artifacts/perf_vanilla.csv",
       "./artifacts/perf_lin_k32.csv"
-    ), x: 85%, y: 85%
+    ), x: 80%, y: 80%
   ),
   caption: [Comparison of scaling times between Linformer and Transformer with an encoder-decoder architecture.
-  Different choices of the parameter $k$ result in the same scaling, with differences in execution time falling within margin of error.
-  This is because of the decoder's bottleneck which still requires the exact attention mechanism to be carried out.]
+  Different choices of the parameter $k$ result in the same scaling, with differences in execution time falling within
+  margin of error. This is because of the decoder's bottleneck which still requires the exact attention mechanism to be
+  carried out.]
 )
 
+#figure(
+  grid(columns: 2,
+    scale(
+      new_plot_data(
+        tick-step: auto,
+        decimals: 3,
+        labels: ("Transformer", "Linformer, k=128"),
+      "./artifacts/perf_vanilla_encoder_only.csv",
+        "./artifacts/perf_lin_k128_encoder_only.csv",
+      ), x: 60%, y: 60%
+    ),
+    scale(
+      new_plot_data(
+        tick-step: 0.0011,
+        decimals: 3,
+        labels: ("Linformer, k=32", "Linformer, k=64", "Linformer, k=128"),
+        "./artifacts/perf_lin_k32_encoder_only.csv",
+        "./artifacts/perf_lin_k64_encoder_only.csv",
+        "./artifacts/perf_lin_k128_encoder_only.csv",
+      ), x: 60%, y: 60%
+    ),
+  ),
+  caption: [Scaling times of Linformer and Transformer with an encoder-only architecture. On the Left the standard
+  Transformer is compared against the Linformer with $k=128$. Linformer maintains constant execution time while varying
+  the sequence. On the Right, various choices of parameters $k$ are shown.] 
+)
 
 
 = Conclusions <conclusions>

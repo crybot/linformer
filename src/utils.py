@@ -41,8 +41,9 @@ def make_model(config: dict, device='cpu') -> nn.Module:
     n_heads = config['n_heads']
     n_layers = config['n_layers']
     vocab_size = config['vocab_size']
+    encoder_only = config.get('encoder_only', False)
 
-    dec_attn = MultiHeadAttention(dim, n_heads)
+    #NOTE: this code is not performance-critical, so we can just allocate decoder's attention modules even if not used
     if config.get('type') == 'Linformer':
         enc_attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
         dec_cross_attn = LinformerAttention(dim, n_heads, k = config['k'], sequence_length = n)
@@ -50,8 +51,12 @@ def make_model(config: dict, device='cpu') -> nn.Module:
         enc_attn = MultiHeadAttention(dim, n_heads)
         dec_cross_attn = MultiHeadAttention(dim, n_heads)
 
+    dec_attn = MultiHeadAttention(dim, n_heads)
+
     encoder = TransformerEncoder(TransformerEncoderLayer(dim, mlp_dim, enc_attn), n_layers=n_layers)
-    decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, dec_attn, cross_attention=dec_cross_attn), n_layers=n_layers)
+    decoder = None
+    if not encoder_only:
+        decoder = TransformerDecoder(TransformerDecoderLayer(dim, mlp_dim, dec_attn, cross_attention=dec_cross_attn), n_layers=n_layers)
 
     transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = vocab_size)
     return LanguageModelingHead(transformer).to(device)

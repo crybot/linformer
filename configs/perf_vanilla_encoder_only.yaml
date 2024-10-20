@@ -1,3 +1,4 @@
+#TODO: batch_size is not used, a max_tokens field would be useful instead
 model:
   type: Vanilla transformer
   dim: 512
@@ -5,7 +6,7 @@ model:
   n_heads: 8
   n_layers: 6
   vocab_size: 50272
-  encoder_only: false
+  encoder_only: true
 training:
   batch_size: 256
 dataset:
