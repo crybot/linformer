@@ -1,5 +1,6 @@
 #import "@preview/cetz:0.3.0"
 #import "@local/cetz-plot:0.1.0": plot, chart
+#import "@preview/showybox:2.0.1": showybox
 
 #set heading(numbering: "1.")
 #set page(
@@ -204,9 +205,9 @@ EN-DE task.
 
 @tab-performance shows that the Linformer performs comparably to the standard Transformer model on both tested metrics,
 scoring worse perplexities on the test dataset, but showing similar BLEU scores. Even though perplexity intuitively
-shrinks when increasing the parameter $k$, the BLEU score seems to worsen. This variation is somewhat expected since
+drops as the parameter $k$ grows, the BLEU score seems to worsen. This variation is somewhat expected since
 @vaswani2017 actually performed their BLEU evaluations on the test dataset with an ensemble of models computed by
-averaging many training checkpoints, ultimately lowering variance by a large margin.
+averaging many training checkpoints, ultimately lowering.
 #figure(
   [#table(
     columns: 3,
@@ -223,9 +224,27 @@ averaging many training checkpoints, ultimately lowering variance by a large mar
 - Show perplexity validation curves
 - Show training and validation loss curves
 
+== Translation examples <translation-examples>
+
+*TODO*:
+- Example translations for Linformer variants
+- Automatically load strings from CSV files
+- Refactor into function
+
+#showybox(
+  [*Example Translation (Transformer) *],
+  [*Input*: The school yard renovation was originally planned back in 2008/2009, however, high unplanned expenses meant that the
+  work had to be pushed back.],
+  [*Candidate*: Die Renovierungsarbeiten waren ursprünglich im Jahr 2008/2009 geplant, hingegen mit hohen ungeplanten Ausgaben, die
+  zurückzufahren mussten.],
+  [*Reference*: Ursprünglich war die Schulhofsanierung sogar schon in den Jahren 2008/2009 geplant, doch hohe unplanmäßige Ausgaben
+  brachten eine Verschiebung.]
+)
+
 == Training time <sec:training>
 == Inference time <sec:inference>
 
+//TODO: size argument
 #let new_plot_data(labels: (), tick-step: 1.0, decimals: 2, ..csv_files) = {
   let data = ()
   let ticks = none
