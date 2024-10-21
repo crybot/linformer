@@ -3,6 +3,7 @@
 #import "@preview/showybox:2.0.1": showybox
 
 #set cite(form: "normal", style: "alphanumeric")
+#set figure(placement: auto)
 
 #set heading(numbering: "1.")
 #set page(
@@ -158,8 +159,9 @@ been used for both architectures.
 #figure(
   [
     #table(
+      align: left,
       columns: 3,
-      [Hyperparameter], [Value], [Description],
+      [*Parameter*], [*Value*], [*Description*],
       [$d_"model"$], [512], [Size of each embedding vector],
       [$h$], [8], [Number of heads in multi-head attention (MHA)],
       [$d_k, d_v$], [64], [Inner dimension of key and value vectors per head],
@@ -202,6 +204,10 @@ Given the dated system components, the experiments were bottlenecked by the CPU,
 - Weights and Biases
 - Logged metrics and validation
 - Training times (maybe drop later section)
+- batch size
+- learning rate schedluing
+- checkpoints (choose the best one)
+- shuffling
 
 = Results and Analysis <results-and-analysis>
 The following section presents the performance results of Linformer variants against a standard Transformer on the WMT14
@@ -216,7 +222,7 @@ averaging many training checkpoints, ultimately lowering.
 #figure(
   [#table(
     columns: 3,
-    [Model], [PPL (test)], [BLEU (test)],
+    [*Model*], [*PPL (test)*], [*BLEU (test)*],
     [Transformer], [#strong[3.41]], [29.92],
     [Linformer (k=32)], [3.96], [#strong[30.08]],
     [Linformer (k=64)], [3.84], [27.74],
@@ -225,9 +231,14 @@ averaging many training checkpoints, ultimately lowering.
   has slightly worse perplexity than the Transformer, but their BLEU scores are comparable.],
 ) <tab-performance>
 
-#strong[TODO]:
-- Show perplexity validation curves
-- Show training and validation loss curves
+
+The perplexity scores evaluated at each training epoch are illustrated in @perplexity-curves for both the standard Transformer and
+each tested Linformer variant.
+
+#figure(
+  image("figures/perplexity_dev.svg", height: 210pt),
+  caption: [Perplexity curves over training epochs computed over the validation (dev) dataset.]
+) <perplexity-curves>
 
 == Translation examples <translation-examples>
 In the following section, we provide a selection of translations generated from test samples, showcasing the performance
@@ -254,7 +265,7 @@ models tested. More translation examples can be found in @appendix-a.
 
 //NOTE: this function is deliberately redundant (in case I decide to change how to display the examples later on)
 #let load_examples(path, n: 2, start: 0, title: [Title]) = {
-  set text(size: 8.6pt)
+  set text(size: 9pt)
   let examples = csv(path, row-type: dictionary).slice(start, count: n)
   let boxes = ()
 
@@ -310,7 +321,27 @@ _Example Translation \#1_:
 _Example Translation \#2_:
 #examples_grid(index: 2)
 
+#pagebreak()
+
 == Training time <training-time>
+
+The time required to fully train a model is of paramount importance when considering the cost of scaling models to
+billions of parameters and large context windows. Although we could not apply a full "linearized" approach of the
+attention mechanism in an encoder-decoder architecture, Linformer should still provide a measurable improvement in the
+wall-clock times required to train it compared to a standard Transformer. @tab-training-time shows the average time
+required to compute a training batch (including time required to compute validation steps).
+#figure(
+  table(
+    columns: 3, 
+    [ *Model*], [*Time (s/batch)*], [*Total Duration (hr)*],
+    [Transformer], [0.221], [14.3],
+    [Linformer ($k = 32$)], [0.205], [13.2],
+    [Linformer ($k = 64$)], [0.209], [13.4],
+  )
+) <tab-training-time>
+
+Linformer marginally improves training times, reducing them by about 7% when using $k=32$ and by 5% when $k=64$.
+
 == Inference time <inference-time>
 
 #let plot_data(labels: (), tick-step: 1.0, decimals: 2, size: (8, 8), ..csv_files) = {
@@ -345,6 +376,13 @@ _Example Translation \#2_:
   })
 }
 
+To experimentally verify the computational efficiency of the Linformer architecture, we ran inference for each model
+variant on batches of randomly generated data, varying the sequence length while keeping the total number of input
+tokens per batch constant. After a warmup phase, each inference step was repeated 10 times and the execution times were
+averaged. The same architectures described in @architecture were used; however, in this case, we were not restricted to
+testing only trained models, as the output was discarded. The results of this analysis are summarized in
+@fig-enc-dec-times.
+
 #figure(
   scale(
     plot_data(
@@ -359,7 +397,15 @@ _Example Translation \#2_:
   Different choices of the parameter $k$ result in the same scaling, with differences in execution time falling within
   margin of error. This is because of the decoder's bottleneck which still requires the exact attention mechanism to be
   carried out.]
-)
+) <fig-enc-dec-times>
+
+Despite Linformer's greater efficiency, the curves in @fig-enc-dec-times indicate that the adopted encoder-decoder
+architecture does not scale linearly with the input sequence length, and in fact exhibits the same computational
+complexity as the Transformer model, up to a multiplicative constant. This is due to the use of the standard MHA in the
+decoder's self-attention layers.
+
+In order to reveal the general scaling behaviour of the Linformer model, we carry out the same tests as before with an
+encoder-only architecture. The results are shown in @fig-enc-times.
 
 #figure(
   grid(
@@ -389,17 +435,26 @@ _Example Translation \#2_:
   caption: [Scaling times of Linformer and Transformer with an encoder-only architecture. On the Left the standard
   Transformer is compared against the Linformer with $k=128$. Linformer maintains constant execution time while varying
   the sequence. On the Right, various choices of parameters $k$ are shown.] 
-)
+) <fig-enc-times>
+
+The wall-time plots clearly show that Linformer's computational complexity does not depend on the sequence length, which
+drastically improves inference performance as the context $n$ grows, compared to a standard Transformer implementation.
 
 
 = Conclusions <conclusions>
 
+#pagebreak()
 #bibliography("biblio.bib")
 #pagebreak()
 
 #show: appendix
-= Translation Examples <appendix-a>
-
+= Translation Examples <appendix-a> \
+\
 #for i in range(10) {
-  examples_grid(index: i)
+  box({
+    [_Example_ \##(i+1)]
+    examples_grid(index: i)
+    linebreak()
+  }
+)
 }
