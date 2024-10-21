@@ -2,6 +2,8 @@
 #import "@local/cetz-plot:0.1.0": plot, chart
 #import "@preview/showybox:2.0.1": showybox
 
+#set cite(form: "normal", style: "alphanumeric")
+
 #set heading(numbering: "1.")
 #set page(
   paper: "us-letter",
@@ -102,7 +104,7 @@ projections of the $K$ and $V$ matrices.
 The Linformer attention mechanism thus cannot be applied in the self-attention layers of the decoder, while it can
 safely be used in the cross-attention stages because of the lack of causal requirements. This hinders the full scaling
 potential of the encoder-decoder Linformer architecture, which is empirically shown in
-Sections #link(<sec:training>)[7.2] and #link(<sec:inference>)[7.3]. // TODO: fix references
+@training-time and @inference-time.
 
 = Prior work <prior-work>
 #strong[TODO]
@@ -308,8 +310,8 @@ _Example Translation \#1_:
 _Example Translation \#2_:
 #examples_grid(index: 2)
 
-== Training time <sec:training>
-== Inference time <sec:inference>
+== Training time <training-time>
+== Inference time <inference-time>
 
 #let plot_data(labels: (), tick-step: 1.0, decimals: 2, size: (8, 8), ..csv_files) = {
   let data = ()
