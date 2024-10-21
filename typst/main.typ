@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.0"
+#import "@preview/cetz:0.3.1"
 #import "@local/cetz-plot:0.1.0": plot, chart
 #import "@preview/showybox:2.0.1": showybox
 
@@ -172,9 +172,9 @@ been used for both architectures.
 ) <tab-hyper>
 
 One last notable change made to the architectures is the choice of the vocabulary size: BART tokenizer's vocabulary has
-been resized to the next multiple of 8 in order to fully exploit the Tensor Cores #footnote[tensor cores: #strong[TODO]]
-of the Nvidia GPU (See @hardware) used during training, which accelerate matrix products when their sizes are divisible
-by 8.
+been resized to the next multiple of 8 in order to fully exploit the Tensor Cores
+#footnote[#link("https://developer.nvidia.com/blog/programming-tensor-cores-cuda-9/")] of the Nvidia GPU used during
+training (See @hardware), which accelerate matrix products when their sizes are divisible by 8.
 
 #strong[TODO]:
 - Architecture diagram
@@ -185,6 +185,35 @@ by 8.
   content((rel: (-1, -0.5)), [*TODO*])
 })
 
+== Implementation <implementation>
+The Transformer and Linformer models have been implemented using PyTorch 2.4.1 following the details presented in
+@vaswani2017 and @linformer2020. Inspired by PyTorch's and Hugginface's APIs, we adopted a compositional approach to
+model definition that allows to easily swap attention mechanisms between Transformer architectures created using a
+general backbone structure.
+
+On top of the standard Transformer, a series of useful wrappers have been implemented that allow the model to
+transparently tokenize input strings, embed tokens, apply positional encodings and produce output token distributions.
+
+The following code defines an encoder-decoder Transformer architecture equivalent to that described in @architecture.
+
+#showybox(
+  frame: (body-color: black.lighten(99%)),
+  ```python
+  attn = MultiHeadAttention(dim=512, n_heads=8)
+  encoder = TransformerEncoder(TransformerEncoderLayer(dim=512, mlp_dim=2048, attn), n_layers=6)
+  decoder = TransformerDecoder(TransformerDecoderLayer(dim=512, mlp_dim=2048, attn), n_layers=6)
+  transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = 50272)
+  transformer = LanguageModelingHead(transformer)
+  ```
+)
+
+The ```python NLPTransformer()``` module internally allocates learnable embeddings and applies positional encoding. The
+```python LanguageModeleingHead()``` module outputs a probability distribution over the vocabulary defined by the
+tokenizer and it provides basic generational functionalities such as greedy decoding
+@sutskever2014sequencesequencelearningneural. To define a Linformer model one can simply swap the
+```python MultiHeadAttention()``` module with ```python LinformerAttention()```. Note that although the defined APIs share
+similarities with those of PyTorch, they have been implemented from scratch, along with everything else except the
+BART tokenizer.
 
 = Hardware <hardware>
 The experiments have been carried out locally on a system running a single Nvidia RTX 3090 GPU with 24GB of GDDR6X VRAM
@@ -220,6 +249,7 @@ drops as the parameter $k$ grows, the BLEU score seems to worsen. This variation
 @vaswani2017 actually performed their BLEU evaluations on the test dataset with an ensemble of models computed by
 averaging many training checkpoints, ultimately lowering.
 #figure(
+  placement: top,
   [#table(
     columns: 3,
     [*Model*], [*PPL (test)*], [*BLEU (test)*],
@@ -236,7 +266,7 @@ The perplexity scores evaluated at each training epoch are illustrated in @perpl
 each tested Linformer variant.
 
 #figure(
-  image("figures/perplexity_dev.svg", height: 210pt),
+  image("figures/perplexity_dev.svg", height: 170pt),
   caption: [Perplexity curves over training epochs computed over the validation (dev) dataset.]
 ) <perplexity-curves>
 
@@ -327,10 +357,7 @@ models tested. More translation examples can be found in @appendix-a.
   examples_grid(index: 2)
 })
 
-#pagebreak()
-
 == Training time <training-time>
-
 The time required to fully train a model is of paramount importance when considering the cost of scaling models to
 billions of parameters and large context windows. Although we could not apply a full "linearized" approach of the
 attention mechanism in an encoder-decoder architecture, Linformer should still provide a measurable improvement in the
