@@ -265,7 +265,7 @@ models tested. More translation examples can be found in @appendix-a.
 
 //NOTE: this function is deliberately redundant (in case I decide to change how to display the examples later on)
 #let load_examples(path, n: 2, start: 0, title: [Title]) = {
-  set text(size: 9pt)
+  set text(size: 8pt)
   let examples = csv(path, row-type: dictionary).slice(start, count: n)
   let boxes = ()
 
@@ -316,10 +316,16 @@ models tested. More translation examples can be found in @appendix-a.
   )
 }
 
-_Example Translation \#1_:
-#examples_grid(index: 0) \
-_Example Translation \#2_:
-#examples_grid(index: 2)
+#box({
+  [_Example Translation \#1_:]
+  examples_grid(index: 0)
+  linebreak()
+})
+
+#box({
+  [_Example Translation \#2_:]
+  examples_grid(index: 2)
+})
 
 #pagebreak()
 
@@ -337,7 +343,9 @@ required to compute a training batch (including time required to compute validat
     [Transformer], [0.221], [14.3],
     [Linformer ($k = 32$)], [0.205], [13.2],
     [Linformer ($k = 64$)], [0.209], [13.4],
-  )
+  ),
+  caption: [Time required by the various model variants to compute a training step (forward and backward passes) and
+  total experiment duration.]
 ) <tab-training-time>
 
 Linformer marginally improves training times, reducing them by about 7% when using $k=32$ and by 5% when $k=64$.
@@ -450,7 +458,7 @@ drastically improves inference performance as the context $n$ grows, compared to
 #show: appendix
 = Translation Examples <appendix-a> \
 \
-#for i in range(10) {
+#for i in range(2, 12) {
   box({
     [_Example_ \##(i+1)]
     examples_grid(index: i)
