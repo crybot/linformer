@@ -34,7 +34,7 @@ def evaluate(model, dataset, tokenizer, out_file = None):
         enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
 
         # Generate batch of candidate translations with greedy decoding
-        cand = model.generate(enc_in, tokenizer, max_length = 256, src_mask = enc_mask) # TODO: check if size is right; should be ['sent1', 'sent2', ...]
+        cand = model.generate(enc_in, tokenizer, max_length = 256, src_mask = enc_mask)
         ref = tokenizer.batch_decode(tgt, skip_special_tokens=True)
 
         candidates.extend(cand)
@@ -67,7 +67,6 @@ def evaluate(model, dataset, tokenizer, out_file = None):
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
-    parser.add_argument('--out', type=str, help='Path to the output file')
     return parser.parse_args()
 
 def main(args):
@@ -102,7 +101,7 @@ def main(args):
 
     out_file = os.path.join('./HLT/artifacts', f'{args.checkpoint}_out.csv')
     bleu, ppl = evaluate(model, dataset, tokenizer, out_file)
-    # wandb.log({'test_bleu': bleu, 'test_perplexity': ppl}, commit=True)
+    wandb.log({'test_bleu': bleu, 'test_perplexity': ppl}, commit=True)
 
 if __name__ == '__main__':
     args = parse_args()

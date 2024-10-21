@@ -14,6 +14,12 @@
   size: 10pt,
 )
 
+#let appendix(body) = {
+  set heading(numbering: "A.", supplement: [Appendix])
+  counter(heading).update(0)
+  body
+}
+
 #align(center, text(17pt)[
   *Evaluating Linformer's performance on the WMT14 EN-DE machine
 translation task*
@@ -26,6 +32,8 @@ translation task*
     #link("m.pampaloni2@studenti.unipi.it")
   ]
 )
+
+
 
 = Introduction <introduction>
 The Transformer architecture, since its introduction in 2017 @vaswani2017, has revolutionized the field of natural
@@ -159,11 +167,6 @@ been used for both architectures.
   caption: [Hyperparameters shared by the tested models]
 ) <tab-hyper>
 
-// - $d_"model" = 512$: the size of each embedding vector;
-// - $h = 8$: the number of heads in MHA;
-// - $d_k = d_v = d_"model" / h = 64$: the inner dimension of key and value vectors for each head in MHA;
-// - $d_"mlp" = 2048$: the hidden layer dimension of each pointwise MLP.
-
 One last notable change made to the architectures is the choice of the vocabulary size: BART tokenizer's vocabulary has
 been resized to the next multiple of 8 in order to fully exploit the Tensor Cores #footnote[tensor cores: #strong[TODO]]
 of the Nvidia GPU (See @hardware) used during training, which accelerate matrix products when their sizes are divisible
@@ -175,7 +178,7 @@ by 8.
 #cetz.canvas({
   import cetz.draw: *
   rect((0, 0), (2, 1), radius: 0.1, fill: orange, name: "enc-mha")
-  content((rel: (-1, -0.5)), [Hello World])
+  content((rel: (-1, -0.5)), [*TODO*])
 })
 
 
@@ -225,27 +228,90 @@ averaging many training checkpoints, ultimately lowering.
 - Show training and validation loss curves
 
 == Translation examples <translation-examples>
+In the following section, we provide a selection of translations generated from test samples, showcasing the performance
+of each model that was evaluated. This aims to offer a comparison of the translation quality produced by the different
+models tested. More translation examples can be found in @appendix-a.
 
-*TODO*:
-- Example translations for Linformer variants
-- Automatically load strings from CSV files
-- Refactor into function
-
-#showybox(
-  [*Example Translation (Transformer) *],
-  [*Input*: The school yard renovation was originally planned back in 2008/2009, however, high unplanned expenses meant that the
-  work had to be pushed back.],
-  [*Candidate*: Die Renovierungsarbeiten waren ursprünglich im Jahr 2008/2009 geplant, hingegen mit hohen ungeplanten Ausgaben, die
-  zurückzufahren mussten.],
-  [*Reference*: Ursprünglich war die Schulhofsanierung sogar schon in den Jahren 2008/2009 geplant, doch hohe unplanmäßige Ausgaben
-  brachten eine Verschiebung.]
+#let example_box = showybox.with(
+  width: 100%,
+  frame: (
+    body-color: white.darken(1%),
+    title-color: black.lighten(20%),
+    // border-color: red.darken(50%),
+    radius: 5pt,
+  ),
+  title-style: (
+    // color: black,
+    weight: "regular",
+    align: center
+  ),
+  shadow: (
+    offset: 0pt,
+  )
 )
+
+//NOTE: this function is deliberately redundant (in case I decide to change how to display the examples later on)
+#let load_examples(path, n: 2, start: 0, title: [Title]) = {
+  set text(size: 8.6pt)
+  let examples = csv(path, row-type: dictionary).slice(start, count: n)
+  let boxes = ()
+
+  for (input, candidate, reference) in examples {
+    boxes.push(
+      example_box(
+        title: title,
+        [*Input*: ] + input,
+        [*Candidate*: ] + candidate,
+        [*Reference*: ] + reference,
+      )
+    )
+  }
+
+  grid(
+    columns: n,
+    align: center,
+    row-gutter: 1em,
+    ..boxes
+  )
+}
+
+#let transformer_example(index: 0) = {
+  load_examples("./artifacts/xf9i0ea3_out.csv", n: 1, start: index, title: [Transformer])
+}
+
+#let linformer_example(k, index: 0) = {
+  if k == 32 {
+    load_examples("./artifacts/ud1t16uq_out.csv", n: 1, start: index, title: [Linformer $k=32$])
+  }
+  else {
+    load_examples("./artifacts/s3edn4nb_out.csv", n: 1, start: index, title: [Linformer $k=64$])
+  }
+}
+
+// Show a single example for each model in a grid like [[lin32, lin64], [transformer]]
+#let examples_grid(index: 0, p: 100%) = {
+  grid(
+    columns: 2,
+    align: center,
+    gutter: 1em,
+    linformer_example(32, index: index),
+    linformer_example(64, index: index),
+    grid.cell(
+      colspan: 2,
+      transformer_example(index: index),
+    )
+  )
+}
+
+_Example Translation \#1_:
+#examples_grid(index: 0) \
+_Example Translation \#2_:
+#examples_grid(index: 2)
 
 == Training time <sec:training>
 == Inference time <sec:inference>
 
-//TODO: size argument
-#let new_plot_data(labels: (), tick-step: 1.0, decimals: 2, ..csv_files) = {
+#let plot_data(labels: (), tick-step: 1.0, decimals: 2, size: (8, 8), ..csv_files) = {
   let data = ()
   let ticks = none
   for path in csv_files.pos() {
@@ -260,7 +326,7 @@ averaging many training checkpoints, ultimately lowering.
 
   return cetz.canvas({
     plot.plot(
-      size: (8,5),
+      size: size,
       x-label: "Seq. length / batch size",
       y-label: "Time (s)",
       x-tick-step: none,
@@ -279,7 +345,8 @@ averaging many training checkpoints, ultimately lowering.
 
 #figure(
   scale(
-    new_plot_data(
+    plot_data(
+      size: (8, 5),
       tick-step: auto,
       labels: ("Transformer", "Linformer, k=32"),
       "./artifacts/perf_vanilla.csv",
@@ -293,18 +360,21 @@ averaging many training checkpoints, ultimately lowering.
 )
 
 #figure(
-  grid(columns: 2,
+  grid(
+    columns: 2,
     scale(
-      new_plot_data(
+      plot_data(
+        size: (8,5),
         tick-step: auto,
         decimals: 3,
         labels: ("Transformer", "Linformer, k=128"),
-      "./artifacts/perf_vanilla_encoder_only.csv",
+        "./artifacts/perf_vanilla_encoder_only.csv",
         "./artifacts/perf_lin_k128_encoder_only.csv",
       ), x: 60%, y: 60%
     ),
     scale(
-      new_plot_data(
+      plot_data(
+        size: (8, 5),
         tick-step: 0.0011,
         decimals: 3,
         labels: ("Linformer, k=32", "Linformer, k=64", "Linformer, k=128"),
@@ -323,4 +393,11 @@ averaging many training checkpoints, ultimately lowering.
 = Conclusions <conclusions>
 
 #bibliography("biblio.bib")
+#pagebreak()
 
+#show: appendix
+= Translation Examples <appendix-a>
+
+#for i in range(10) {
+  examples_grid(index: i)
+}
