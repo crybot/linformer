@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.3.1"
+#import "@preview/cetz:0.3.0"
 #import "@local/cetz-plot:0.1.0": plot, chart
 #import "@preview/showybox:2.0.1": showybox
 
@@ -13,8 +13,8 @@
 )
 #set par(justify: true)
 #set text(
-  // font: "New Computer Modern",
-  size: 10pt,
+  font: "New Computer Modern",
+  size: 11pt,
 )
 
 #let appendix(body) = {
@@ -91,7 +91,7 @@ In Linformer this method cannot be applied, as the attention matrix is linearly 
 Instead, we apply masking by zeroing out elements in $Q , K , V$ corresponding to pad tokens. This ensures that the pad
 tokens do not contribute to the final attention result.
 
-=== Causal masking <causal-masking>
+== Causal masking <causal-masking>
 The standard Transformer was trained on the WMT14 EN-DE machine translation dataset, adopting an encoder-decoder
 architecture. The self-attention mechanism in the decoder’s layers need to employ causal masking in order for future
 (right) tokens not to contribute to the output of past positions. In the Transformer this again can be achieved by
@@ -107,9 +107,6 @@ safely be used in the cross-attention stages because of the lack of causal requi
 potential of the encoder-decoder Linformer architecture, which is empirically shown in
 @training-time and @inference-time.
 
-= Prior work <prior-work>
-#strong[TODO]
-
 = Data <data>
 As in @vaswani2017, we used the WMT14 EN-DE @bojar-etal-2014-findings dataset comprised of about 4.5 million sencente
 pairs. For ease of use, we used the data hosted on a Kaggle repository
@@ -117,24 +114,37 @@ pairs. For ease of use, we used the data hosted on a Kaggle repository
 english to german sentences in a single CSV file for training. Additionally, a validation (dev) and test dataset are
 provided. The validation set has not been used.
 
-Because of resources constraints, we could note use or preprocess the entire dataset while keeping it in memory.
-Applying preprocessing on the fly during training would have slowed down the experiment significantly, rendering its
-results meaningless. Instead, we used half of the original training dataset and used the last 1% of it as a validation
-set.
+Because of resources constraints, we could not use or preprocess the entire dataset while keeping it in memory. Applying
+preprocessing on the fly during training would have slowed down the experiment significantly, rendering its results
+meaningless. Instead, we used half of the original training dataset and used the last 1% of it as a validation set.
 
 We used the pretrained Huggingface #footnote("https://www.huggingface.co") implementation of the BART @bart2019
 tokenizer, which employs Byte Pair Encoding (BPE) and was applied to the dataset prior to training as a preprocessing
 step. The vocabulary of the tokenizer included about 50k tokens, in contrast to the vocabulary size of 37k from
 @vaswani2017. We truncated each sentence in the dataset to 256 tokens, padding on the right when necessary to enable
-training in batches. Each batch is randomly sampled from the training dataset and trimmed to the length of the longest
-non-padded sequence within the batch, significantly improving performance for batches with many short sequences (and,
-consequently, a high number of <pad> tokens).
+training in batches. This should not cause meaningful degradation in model performance since the average sequence length
+after tokenization of the training dataset is much lower for both source and target sentences.
+@tab-data-stats shows post-tokenization statistics for the training dataset without padding applied.
+
+#figure(
+  table(
+    columns: 4,
+    [*Input*], [*Average Length*], [*Min Length*], [*Max Length*],
+    [source],  [31], [3], [10864],
+    [target],  [59], [3], [8318],
+  ),
+  caption: [Statistics for the training dataset, reporting average (rounded up to the nearest integer), minimum and
+  maximum sequence lengths after tokenization for source and target sequences.]
+) <tab-data-stats>
+
+During training, each batch is randomly sampled and trimmed to the length of the longest non-padded sequence within the
+batch, significantly improving performance for batches with many short sequences (and, consequently, a high number of
+<pad> tokens).
+
 
 The validation dataset is only used to log metrics during training and for scheduling the learning rate. The test
 dataset is instead used during the last evaluation step of each experiment.
 
-#strong[TODO]
-- Average sequence length in training dataset
 
 = Architecture <architecture>
 
@@ -149,6 +159,9 @@ In the standard Transformer model, each attention layer employs the scaled dot-p
 @vaswani2017, both for the encoder's self-attention and the decoder's self-attention and cross-attention.
 The Linformer instead uses the linearized attention mechanism proposed by @linformer2020 everywhere except in the
 self-attention stage of the decoder's layers, because of causality requirements (See @causal-masking).
+
+The implementation of Linformer we provide employs shared projection matrices $E, F$ across heads, but different for
+each layer. This is one of the variants proposed by the authors @linformer2020.
 
 Both the standard Transformer and the Linformer adopt residual connections and Layer Normalization applied after each
 attention block and feed forward layer as in @vaswani2017. Sinusoidal positional encoding and learned embeddings have
@@ -176,17 +189,13 @@ been resized to the next multiple of 8 in order to fully exploit the Tensor Core
 #footnote[#link("https://developer.nvidia.com/blog/programming-tensor-cores-cuda-9/")] of the Nvidia GPU used during
 training (See @hardware), which accelerate matrix products when their sizes are divisible by 8.
 
-#strong[TODO]:
-- Architecture diagram
-
-#cetz.canvas({
-  import cetz.draw: *
-  rect((0, 0), (2, 1), radius: 0.1, fill: orange, name: "enc-mha")
-  content((rel: (-1, -0.5)), [*TODO*])
-})
+== Text generation <text-generation>
+In contrast to @vaswani2017, autoregressive machine translation was implemented through greedy decoding
+@sutskever2014sequencesequencelearningneural. We limited the output's length to 256 tokens, but terminate early when
+each sequence in the batch has produced an EOS token.
 
 == Implementation <implementation>
-The Transformer and Linformer models have been implemented using PyTorch 2.4.1 following the details presented in
+The Transformer and Linformer models have been implemented using PyTorch `2.5.0a0+872d972e41` following the details presented in
 @vaswani2017 and @linformer2020. Inspired by PyTorch's and Hugginface's APIs, we adopted a compositional approach to
 model definition that allows to easily swap attention mechanisms between Transformer architectures created using a
 general backbone structure.
@@ -209,11 +218,10 @@ The following code defines an encoder-decoder Transformer architecture equivalen
 
 The ```python NLPTransformer()``` module internally allocates learnable embeddings and applies positional encoding. The
 ```python LanguageModeleingHead()``` module outputs a probability distribution over the vocabulary defined by the
-tokenizer and it provides basic generational functionalities such as greedy decoding
-@sutskever2014sequencesequencelearningneural. To define a Linformer model one can simply swap the
-```python MultiHeadAttention()``` module with ```python LinformerAttention()```. Note that although the defined APIs share
-similarities with those of PyTorch, they have been implemented from scratch, along with everything else except the
-BART tokenizer.
+tokenizer and it provides basic generational functionalities such as greedy decoding. To define a Linformer model one
+can simply swap the ```python MultiHeadAttention()``` module with ```python LinformerAttention()```. Note that although
+the defined APIs share similarities with those of PyTorch, they have been implemented from scratch, along with
+everything else except the BART tokenizer.
 
 = Hardware <hardware>
 The experiments have been carried out locally on a system running a single Nvidia RTX 3090 GPU with 24GB of GDDR6X VRAM
@@ -222,21 +230,29 @@ and an Intel i7 4770k CPU overclocked at 4.4GHz. The system's memory amounted to
 Given the dated system components, the experiments were bottlenecked by the CPU, which could not keep the GPU usage at
 100% most of the time during training, hovering near the 96-98% range of utilization instead.
 
-#strong[TODO]:
-- Show CPU/GPU utilization graph during training (wandb)
-
 = Experiments <experiments>
+Each experiment was conducted independently on the same machine within a Docker container based on Nvidia's PyTorch NGC
+#footnote[#link("https://catalog.ngc.nvidia.com/orgs/nvidia/containers/pytorch")] version 24.08, which provides an
+optimized set of libraries for efficient training and inference on GPUs. Additionally, mixed precision training
+#footnote[#link("https://developer.nvidia.com/automatic-mixed-precision")] was employed throughout, reducing memory
+usage and significantly speeding up computations.
 
-#strong[TODO]:
-- Docker container (NVCR)
-- Mixed precision training
-- Weights and Biases
-- Logged metrics and validation
-- Training times (maybe drop later section)
-- batch size
-- learning rate schedluing
-- checkpoints (choose the best one)
-- shuffling
+We trained each model using a negative log-likelihood loss function with teacher forcing, computed pointwise across the
+batch and averaged. At the end of each epoch, we logged the loss and perplexity score calculated on the validation
+dataset. For both the logging of training and validation metrics, as well as model checkpointing, custom callback
+routines were implemented using Weights & Biases #footnote[#link("https://wandb.ai/site/")]. These callbacks enabled
+automatic storage of metrics, system information and hyperparameters, and saved model weights whenever validation
+metrics improved during training.
+
+Since training sequence lengths varied due to padding trimming (see @data), we used a batch size of 88 input sequences
+for each run. Using the numbers reported in @tab-data-stats, this results in an average number of respectively #(31*88)
+source and #(59*88) target tokens per batch. In the worst case the maximum number of tokens per batch is #(256*88),
+which is close to what was used in @vaswani2017. This allowed for high memory utilization without running into
+allocation errors.
+
+The learning rate schedule followed a similar approach to @vaswani2017, starting with a linear warmup over 4,000 steps
+from $10^(-7)$ to $10^(-4)$. After the warmup, we applied a cosine annealing strategy, gradually decreasing the learning
+rate to $10^(-6)$ by the final epoch. Each experiment ran for 10 training epochs.
 
 = Results and Analysis <results-and-analysis>
 The following section presents the performance results of Linformer variants against a standard Transformer on the WMT14
@@ -247,14 +263,14 @@ EN-DE task.
 scoring worse perplexities on the test dataset, but showing similar BLEU scores. Even though perplexity intuitively
 drops as the parameter $k$ grows, the BLEU score seems to worsen. This variation is somewhat expected since
 @vaswani2017 actually performed their BLEU evaluations on the test dataset with an ensemble of models computed by
-averaging many training checkpoints, ultimately lowering.
+averaging many training checkpoints, ultimately lowering variance across experiments.
 #figure(
   placement: top,
   [#table(
     columns: 3,
     [*Model*], [*PPL (test)*], [*BLEU (test)*],
-    [Transformer], [#strong[3.41]], [29.92],
-    [Linformer (k=32)], [3.96], [#strong[30.08]],
+    [Transformer], [*3.41*], [29.92],
+    [Linformer (k=32)], [3.96], [*30.08*],
     [Linformer (k=64)], [3.84], [27.74],
   )],
   caption: [Linformer performance against a vanilla Transformer model on the WMT14 EN-DE (test) dataset. The Linformer
@@ -262,11 +278,11 @@ averaging many training checkpoints, ultimately lowering.
 ) <tab-performance>
 
 
-The perplexity scores evaluated at each training epoch are illustrated in @perplexity-curves for both the standard Transformer and
-each tested Linformer variant.
+The perplexity scores evaluated at each training epoch are illustrated in @perplexity-curves for both the standard
+Transformer and each tested Linformer variant.
 
 #figure(
-  image("figures/perplexity_dev.svg", height: 170pt),
+  image("figures/perplexity_dev.svg", height: 220pt),
   caption: [Perplexity curves over training epochs computed over the validation (dev) dataset.]
 ) <perplexity-curves>
 
@@ -354,13 +370,13 @@ models tested. More translation examples can be found in @appendix-a.
 
 #box({
   [_Example Translation \#2_:]
-  examples_grid(index: 2)
+  examples_grid(index: 1)
 })
 
 == Training time <training-time>
 The time required to fully train a model is of paramount importance when considering the cost of scaling models to
-billions of parameters and large context windows. Although we could not apply a full "linearized" approach of the
-attention mechanism in an encoder-decoder architecture, Linformer should still provide a measurable improvement in the
+billions of parameters and large context windows. Although fully applying a "linearized" attention mechanism throughout
+an encoder-decoder architecture is not possible, Linformer should still provide a measurable improvement in the
 wall-clock times required to train it compared to a standard Transformer. @tab-training-time shows the average time
 required to compute a training batch (including time required to compute validation steps).
 #figure(
@@ -368,7 +384,7 @@ required to compute a training batch (including time required to compute validat
     columns: 3, 
     [ *Model*], [*Time (s/batch)*], [*Total Duration (hr)*],
     [Transformer], [0.221], [14.3],
-    [Linformer ($k = 32$)], [0.205], [13.2],
+    [Linformer ($k = 32$)], [*0.205*], [*13.2*],
     [Linformer ($k = 64$)], [0.209], [13.4],
   ),
   caption: [Time required by the various model variants to compute a training step (forward and backward passes) and
@@ -395,7 +411,7 @@ Linformer marginally improves training times, reducing them by about 7% when usi
   return cetz.canvas({
     plot.plot(
       size: size,
-      x-label: "Seq. length / batch size",
+      x-label: "Seq. length/batch size",
       y-label: "Time (s)",
       x-tick-step: none,
       y-decimals: decimals,
@@ -444,7 +460,7 @@ encoder-only architecture. The results are shown in @fig-enc-times.
 
 #figure(
   grid(
-    columns: 2,
+    columns: 1,
     scale(
       plot_data(
         size: (8,5),
@@ -453,7 +469,7 @@ encoder-only architecture. The results are shown in @fig-enc-times.
         labels: ("Transformer", "Linformer, k=128"),
         "./artifacts/perf_vanilla_encoder_only.csv",
         "./artifacts/perf_lin_k128_encoder_only.csv",
-      ), x: 60%, y: 60%
+      ), x: 80%, y: 80%
     ),
     scale(
       plot_data(
@@ -464,7 +480,7 @@ encoder-only architecture. The results are shown in @fig-enc-times.
         "./artifacts/perf_lin_k32_encoder_only.csv",
         "./artifacts/perf_lin_k64_encoder_only.csv",
         "./artifacts/perf_lin_k128_encoder_only.csv",
-      ), x: 60%, y: 60%
+      ), x: 80%, y: 80%
     ),
   ),
   caption: [Scaling times of Linformer and Transformer with an encoder-only architecture. On the Left the standard
@@ -472,11 +488,23 @@ encoder-only architecture. The results are shown in @fig-enc-times.
   the sequence. On the Right, various choices of parameters $k$ are shown.] 
 ) <fig-enc-times>
 
-The wall-time plots clearly show that Linformer's computational complexity does not depend on the sequence length, which
-drastically improves inference performance as the context $n$ grows, compared to a standard Transformer implementation.
+The wall-time plots clearly show that, as an encoder-only architecture, Linformer's computational complexity does not
+depend on the sequence length, which drastically improves inference performance as the context $n$ grows, compared to a
+standard Transformer implementation.
 
 
 = Conclusions <conclusions>
+
+Linformer's performance showed to be comparable with that of a standard Transformer on the WMT14 english to german
+machine translation task, while providing measurable efficiency gains over the former model, although they were limited
+by the decoder's bottleneck, which still required the use of the full attention matrix due to causality.
+
+Investigating encoder-only architectures adopting the Linformer attention mechanism showed significantly faster
+inference speeds over the vanilla Transformer model, particularly for longer sequences, suggesting that encoding tasks
+such as sentence classification might be a better benchmark for such models. 
+
+Encoder-decoder Transformers requiring causality masking could probably benefit more from other linearization
+approaches.
 
 #pagebreak()
 #bibliography("biblio.bib")

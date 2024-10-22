@@ -41,25 +41,23 @@ class CSVDataset(Dataset):
         else:
             df = pd.read_csv(path, lineterminator='\n')
             self.src = df[src_key].tolist()
-            self.tgt = []
+            self.tgt = df[tgt_key].tolist()
 
             self.src_masks = []
             self.tgt_masks = []
-
-            src_t = np.zeros((len(self.src), max_length), dtype=int)
-            tgt_t = np.zeros((len(self.src), max_length), dtype=int)
-            src_masks_t = np.zeros((len(self.src), max_length), dtype=int)
-            tgt_masks_t = np.zeros((len(self.src), max_length), dtype=int)
-
-            self.tgt = df[tgt_key].tolist()
-
-            batch_size = 500
-            batches = len(self.src) // batch_size
 
             if len(self.src) != len(self.tgt):
                 raise ValueError('src and tgt must have the same length')
 
             if self.tokenizer:
+                src_t = np.zeros((len(self.src), max_length), dtype=int)
+                tgt_t = np.zeros((len(self.src), max_length), dtype=int)
+                src_masks_t = np.zeros((len(self.src), max_length), dtype=int)
+                tgt_masks_t = np.zeros((len(self.src), max_length), dtype=int)
+
+                batch_size = 500
+                batches = len(self.src) // batch_size
+
                 i = 0
                 while len(self.src) > 0:
                     print(f'Processing batch {i}/{batches}')
