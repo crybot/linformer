@@ -1,5 +1,5 @@
-#import "@preview/cetz:0.3.0"
-#import "@local/cetz-plot:0.1.0": plot, chart
+#import "@preview/cetz:0.3.1"
+#import "@preview/cetz-plot:0.1.0": plot, chart
 #import "@preview/showybox:2.0.1": showybox
 
 #set cite(form: "normal", style: "alphanumeric")
@@ -14,7 +14,7 @@
 #set par(justify: true)
 #set text(
   font: "New Computer Modern",
-  size: 11pt,
+  size: 10pt,
 )
 
 #let appendix(body) = {
@@ -278,13 +278,14 @@ averaging many training checkpoints, ultimately lowering variance across experim
 ) <tab-performance>
 
 
-The perplexity scores evaluated at each training epoch are illustrated in @perplexity-curves for both the standard
-Transformer and each tested Linformer variant.
+// The perplexity scores evaluated at each training epoch are illustrated in @perplexity-curves for both the standard
+// Transformer and each tested Linformer variant.
 
-#figure(
-  image("figures/perplexity_dev.svg", height: 220pt),
-  caption: [Perplexity curves over training epochs computed over the validation (dev) dataset.]
-) <perplexity-curves>
+//NOTE: Not supported by Typst because of foreignObject
+// #figure(
+//   image("figures/perplexity_dev.svg", height: 220pt),
+//   caption: [Perplexity curves over training epochs computed over the validation (dev) dataset.]
+// ) <perplexity-curves>
 
 == Translation examples <translation-examples>
 In the following section, we provide a selection of translations generated from test samples, showcasing the performance
