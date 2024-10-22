@@ -207,6 +207,7 @@ The following code defines an encoder-decoder Transformer architecture equivalen
 
 #showybox(
   frame: (body-color: black.lighten(99%)),
+  [#set text(size: 9pt)
   ```python
   attn = MultiHeadAttention(dim=512, n_heads=8)
   encoder = TransformerEncoder(TransformerEncoderLayer(dim=512, mlp_dim=2048, attn), n_layers=6)
@@ -214,6 +215,7 @@ The following code defines an encoder-decoder Transformer architecture equivalen
   transformer = NLPTransformer(encoder = encoder, decoder = decoder, vocab_size = 50272)
   transformer = LanguageModelingHead(transformer)
   ```
+  ]
 )
 
 The ```python NLPTransformer()``` module internally allocates learnable embeddings and applies positional encoding. The
