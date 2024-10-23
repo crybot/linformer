@@ -27,6 +27,11 @@
   stroke: none,
 )
 
+#show table: t => {
+  set text(size: 9pt)
+  t
+}
+
 #align(center, text(17pt)[
   *Evaluating Linformer's Performance on the WMT14 EN-DE Machine
 Translation Task*
@@ -327,7 +332,7 @@ models tested. More translation examples can be found in @appendix-a.
 
 //NOTE: this function is deliberately redundant (in case I decide to change how to display the examples later on)
 #let load_examples(path, n: 2, start: 0, title: [Title]) = {
-  set text(size: 8pt)
+  set text(size: 8.25pt)
   let examples = csv(path, row-type: dictionary).slice(start, count: n)
   let boxes = ()
 
