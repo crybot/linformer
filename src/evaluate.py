@@ -1,20 +1,20 @@
+import os
 import torch
 import wandb
 import argparse
-import numpy as np
-from torch import nn, Tensor
+import pandas as pd
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader
 from datasets import CSVDataset
 from evaluation.metrics import perplexity
 from evaluation.utils import extract_probs
-from utils import to_device, print_summary, set_random_state, download_wandb_checkpoint
-from utils import make_model, download_wandb_config, load_model_from_wandb_checkpoint
+from utils import to_device
+from utils import load_model_from_wandb_checkpoint
 from sacrebleu import corpus_bleu
 from text.utils import encoder_decoder_inputs, trim_batch_pad_tokens
 
-def evaluate(model, dataset, tokenizer):
-    batch_size = 200
+def evaluate(model, dataset, tokenizer, out_file = None):
+    batch_size = 100
     dl = DataLoader(dataset,
             batch_size=batch_size,
             shuffle=False,
@@ -23,6 +23,7 @@ def evaluate(model, dataset, tokenizer):
             prefetch_factor=8,
             persistent_workers=False)
 
+    input_sentences = []
     candidates = []
     references = []
     log_probs = torch.tensor([], device='cuda')
@@ -33,11 +34,12 @@ def evaluate(model, dataset, tokenizer):
         enc_in, dec_in, tgt, enc_mask, dec_mask, tgt_mask = encoder_decoder_inputs(*inputs)
 
         # Generate batch of candidate translations with greedy decoding
-        cand = model.generate(enc_in, tokenizer, max_length = 256, src_mask = enc_mask) # TODO: check if size is right; should be ['sent1', 'sent2', ...]
+        cand = model.generate(enc_in, tokenizer, max_length = 256, src_mask = enc_mask)
         ref = tokenizer.batch_decode(tgt, skip_special_tokens=True)
 
         candidates.extend(cand)
         references.extend(ref)
+        input_sentences.extend(tokenizer.batch_decode(enc_in, skip_special_tokens=True))
 
         # Accumulate per-token log-probabilities to compute corpus perplexity
         with torch.no_grad():
@@ -50,6 +52,15 @@ def evaluate(model, dataset, tokenizer):
     references = [[s] for s in references]
     bleu = corpus_bleu(candidates, references).score
     ppl = perplexity(log_probs)
+
+    if out_file:
+        print('Saving file...')
+        df = pd.DataFrame()
+        df['input'] = input_sentences
+        df['candidate'] = candidates
+        df['reference'] = [r[0] for r in references]
+        df.to_csv(out_file, header=True, index=False)
+            
 
     return bleu, ppl
 
@@ -78,7 +89,6 @@ def main(args):
             device='cpu'
             )
 
-
     print(f'Checkpoint path provided: {args.checkpoint}')
     print(f'Resuming...')
     model = load_model_from_wandb_checkpoint(f'HLT/{args.checkpoint}', device='cuda')
@@ -89,7 +99,8 @@ def main(args):
             resume='must',
             reinit=True)
 
-    bleu, ppl = evaluate(model, dataset, tokenizer)
+    out_file = os.path.join('./HLT/artifacts', f'{args.checkpoint}_out.csv')
+    bleu, ppl = evaluate(model, dataset, tokenizer, out_file)
     wandb.log({'test_bleu': bleu, 'test_perplexity': ppl}, commit=True)
 
 if __name__ == '__main__':

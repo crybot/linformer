@@ -24,7 +24,7 @@ COPY ./configs ./HLT/configs
 COPY ./src ./HLT/src
 RUN mkdir -p ./HLT/artifacts
 
-ENV TOKENIZERS_PARALLELISM=false
+ENV TOKENIZERS_PARALLELISM=true
 #
 # Allows for already allocated segments to expand in size: this is useful if,
 # as in our usecase, batches frequently change in size (the sequence dimension
@@ -34,6 +34,5 @@ ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # TODO: generalize task script
 # ENTRYPOINT ["python3", "./HLT/src/train_mt.py"]
 # ENTRYPOINT ["python3", "./HLT/src/evaluate.py"]
-ENTRYPOINT ["python3", "./HLT/src/compare_performance.py"]
-# CMD ["python3", "./HLT/src/pretokenize_dataset.py"]
-# CMD ["python3", "-m", "torch.utils.bottleneck", "./HLT/src/train_mt.py"]
+# ENTRYPOINT ["python3", "./HLT/src/compare_performance.py"]
+# ENTRYPOINT ["python3", "./HLT/src/compute_average_length.py"]

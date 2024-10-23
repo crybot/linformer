@@ -1,10 +1,16 @@
 \documentclass[titlepage]{article}
 \usepackage{authblk} % for \affil (affiliations)
-\usepackage[backend=biber, sorting=none]{biblatex}
+\emergencystretch=1em
 \usepackage[margin=4cm]{geometry}
 \usepackage{booktabs} % For clean table rules
 \usepackage{amsmath} % For mathematical typesetting
 \usepackage{amsfonts}
+\usepackage{hyperref}
+\usepackage[
+backend=biber,
+style=alphabetic,
+sorting=ynt
+]{biblatex}
 
 \addbibresource{biblio.bib}
 
@@ -12,6 +18,8 @@
 translation task}
 \author{Marco Pampaloni}
 \affil{Department of Computer Science}
+
+\emergencystretch=1em
 
 \begin{document}
 \maketitle
@@ -28,7 +36,7 @@ longer sequence lengths due to its attention mechanism, which scales
 quadratically with the number of input tokens. This is a problem at both
 training and inference time.
 
-For this reason, there has been a huge research effort in these years to
+For this reason, there has been a huge research effort in recent years to
 develop faster attention mechanisms, either exploiting the IO properties of the
 hardware these models run on~\cite{flashAttention2022}, or by approximating the
 result of scaled dot product attention (SDPA).
@@ -36,7 +44,7 @@ result of scaled dot product attention (SDPA).
 The \emph{Linformer} architecture~\cite{linformer2020} is an example of the
 latter approach. The authors first empirically show that the attention matrix
 is often low-rank, meaning that it could be approximated with an SVD
-decomposition by only keeping the singular values with larger magnitude. This
+decomposition by only keeping the largest singular values. This
 would of course introduce additional asymptotical complexity to the method, so
 the authors propose the adoption of linear projections on the keys and values
 matrices $K, V$ to reduce their dimensionality and drive the computational
@@ -48,20 +56,25 @@ The standard multi head attention (MHA) introduced by~\cite{vaswani2017} is comp
 follows
 \begin{equation}
   \begin{aligned}
-    \textrm{MultiHead}(Q, K, V) &= \textrm{Concat}(\textrm{head}_1, \dots, \textrm{head}_h) W^O \\
-    \textrm{where } \textrm{head}_i &= \textrm{Attention}(Q W^Q, K W^K, V W^V) \\
-    &= \underbrace{\textrm{softmax}\left(\frac{Q W^Q (K
-          W^K)^T}{\sqrt{d_{model}}}\right)}_{P_i} V W^V \\
+    \textrm{MultiHead}(Q, K, V) &=
+    \textrm{Concat}(\textrm{head}_1, \dots, \textrm{head}_h) W^O \\
+    \textrm{where } \textrm{head}_i &=
+    \textrm{Attention}(Q W^Q, K W^K, V W^V) \\
+    &= \underbrace{
+      \textrm{softmax}\left(
+        \frac{Q W^Q {(K W^K)}^T}{\sqrt{d_{model}}}
+    \right)
+  }_{P_i} V W^V \\
   \end{aligned}
 \end{equation}
 
 The Linformer attention first projects the key and value matrices into a
-dimension of space $\mathbb{R}^{k \times d}$ with projection matrices $E, F \in
+space of dimension $\mathbb{R}^{k \times d}$ with projection matrices $E, F \in
 \mathbb{R}^{k \times n}$ and then computes MHA as before:
 
 \begin{equation}
   \overline{\textrm{head}}_i = \textrm{Attention}\left( Q, E_i K W_i^K, F_i V
-    W_i^V \right)
+  W_i^V \right)
 \end{equation}
 
 This produces an attention matrix $\bar{P_i} \in \mathbb{R}^{n \times k}$,
@@ -74,40 +87,90 @@ $n$ to a large number and handle shorter inputs by slicing the projection
 matrices along their columns before multiplying them with the inputs $K$ and
 $V$.
 
+This work aims at replicating the results of \cite{vaswani2017} and \cite{linformer2020} and comparing the two architecture on the WMT14 EN-DE machine translation task.
+
 \subsection{Masking}
+In a standard Transformer architecture, sequences are usually batched together
+in order to exploit the model's parallelism. This requires padding to be
+applied to the batch, but pad tokens should not contribute to the attention's
+output. This can be achieved by masking the attention matrix, setting zeroing
+out its elements in correspondence with input pad tokens. This if often done by
+setting each corresponding element to $-\infty$ prior to applying the row-wise
+softmax.
+
+In Linformer this method cannot be applied, as the attention matrix is linearly projected to a lower-dimensional space. Instead, we apply masking by zeroing out elements in $Q, K, V$ corresponding to pad tokens. This ensures that the pad tokens do not contribute to the final attention result.
 \subsubsection{Causal masking}
+The standard Transformer was trained on the WMT14 EN-DE machine translation dataset, adopting an encoder-decoder architecture. The self-attention mechanism in the decoder's layers need to employ causal masking in order for future (right) tokens not to contribute to the output of past positions. In the Transformer this again can be achieved by masking, in this case by adding an upper triangular matrix filled with $-\infty$ values to the pre-softmax attention matrix.
+
+Linformer, which was originally developed for encoder-only architectures, does not allow for causal masking, because however you mask the resulting pre-activation attention matrix, future tokens leak into the past due to the linear projections of the $K$ and $V$ matrices.
+
+The Linformer attention mechanism thus cannot be applied in the self-attention layers of the decoder, while it can safely be used in the cross-attention stages because of the lack of causal requirements. This hinders the full scaling potential of the encoder-decoder Linformer architecture, which is empirically shown in Sections~\ref{sec:training} and ~\ref{sec:inference}.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{Prior work}
+\textbf{TODO}
 
 \section{Data}
 
+\textbf{TODO}
+
+\begin{itemize}
+  \item Tokenizer used: BART byte-encoding ~50k vocab size
+  \item Dataset description (WMT14 EN-DE): 50\% used for memory reasons
+  \item Max length set to 256
+  \item Padding on the right
+  \item Padding trimmed within batches
+  \item Average sequence length in training dataset
+  \item Training, validation, test split
+  \item Use of test dataset
+\end{itemize}
+
+
 \section{Architecture}
 
+\section{Hardware}
+\subsection{CPU bound}
+
 \section{Experiments}
+\subsection{Docker container (NVCR)}
+\subsection{Mixed precision training}
 
 \section{Results and Analysis}
 
 \subsection{Model performance}
 
-\begin{center}
-  \begin{tabular}{c c c}
-    \toprule
-    Model                 & PPL (dev) & BLEU (dev)  \\
-    \midrule
-    Transformer       & \bf{3.59} & \bf{26.7}   \\
-    Linformer (k=32)  & -         & -           \\
-    Linformer (k=64)  & -         & -           \\
-    \bottomrule
-  \end{tabular}
-\end{center}
+\textbf{TODO}
+\begin{itemize}
+  \item Perplexity is wrong: need to compute first all log likelihoods across
+    all batches and then exponentiate them
+  \item BLEU might be missing a dimension in the reference corpus
+\end{itemize}
 
-\subsection{Training time}
+\begin{table}
+  \begin{center}
+    \begin{tabular}{c c c}
+      \toprule
+      Model                 & PPL (test) & BLEU (test)  \\
+      \midrule
+      Transformer       & \textbf{3.41} & 29.92 \\
+      Linformer (k=32)  & 3.96          & \textbf{30.08}           \\
+      Linformer (k=64)  & 3.84          & 27.74           \\
+      \bottomrule
+    \end{tabular}
+  \end{center}
+  \caption{Linformer performance against a vanilla Transformer model on the
+  WMT14 EN-DE (test) dataset. The Linformer has slightly worse perplexity than
+the Transformer, but their BLEU scores are comparable.}
+  \label{tab:performance}
+\end{table}
+\subsection{Training time}\label{sec:training}
 
-\subsection{Inference time}
+\subsection{Inference time}\label{sec:inference}
 
 \section{Conclusions}
 
 \section*{Bibliography}
 \nocite{*}
-\printbibliography
+\printbibliography[heading=bibintoc]
 \end{document}

@@ -5,6 +5,7 @@ model:
   n_heads: 8
   n_layers: 6
   vocab_size: 50272
+  encoder_only: false
 training:
   batch_size: 256
 dataset:

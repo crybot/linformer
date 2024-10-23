@@ -1,0 +1,13 @@
+model:
+  type: Linformer
+  dim: 512
+  mlp_dim: 2048
+  n_heads: 8
+  n_layers: 6
+  k: 128
+  vocab_size: 50272
+  encoder_only: true
+training:
+  batch_size: 256
+dataset:
+  max_length: 16384

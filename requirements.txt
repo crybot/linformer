@@ -8,3 +8,4 @@ sacrebleu==2.4.3
 torch==2.4.1
 transformers==4.45.2
 wandb==0.18.3
+tokenizers
