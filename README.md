@@ -44,3 +44,29 @@ To compare the inference performance of different models you can use `src/compar
 ## Evaluation
 Evaluating the models requires access to a Weights & Biases account. By default the scripts look for a project named `HLT`, but you can change it by editing `src/evaluate.py`.
 Running `./run.sh src/evaluate.py --checkpoint <wandb-checkpoint>` downloads a checkpoint from Weights & Biases and evaluates it on the test dataset, computing BLEU and perplexity metrics.
+
+## Results
+You can find preliminary results and analysis in the provided [pdf document](https://github.com/crybot/linformer/blob/main/typst/main.pdf).
+
+# References
+```bibtex
+@misc{wang2020linformerselfattentionlinearcomplexity,
+      title={Linformer: Self-Attention with Linear Complexity}, 
+      author={Sinong Wang and Belinda Z. Li and Madian Khabsa and Han Fang and Hao Ma},
+      year={2020},
+      eprint={2006.04768},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2006.04768}, 
+}
+
+@misc{vaswani2023attentionneed,
+      title={Attention Is All You Need}, 
+      author={Ashish Vaswani and Noam Shazeer and Niki Parmar and Jakob Uszkoreit and Llion Jones and Aidan N. Gomez and Lukasz Kaiser and Illia Polosukhin},
+      year={2023},
+      eprint={1706.03762},
+      archivePrefix={arXiv},
+      primaryClass={cs.CL},
+      url={https://arxiv.org/abs/1706.03762}, 
+}
+```
