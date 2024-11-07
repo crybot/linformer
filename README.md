@@ -30,6 +30,11 @@ To train a Linformer with `k=32`:
 ./run.sh src/train_my.py --config configs/lin_k32_training.yaml
 ```
 
+Training logs validation metrics to Weights & Biases and the build script looks for a `~/.wandb_secret` file containing your API key under your home directory by default. You can change this behaviour by editing `build.sh`.
+
+You can also disable Weights & Biases logging altogether by commenting out the callbacks in `src/train_my.py`, but you will not be able to automatically checkpoint the model for later evaluation.
+The callbacks to comment out are: `wandb_callback, checkpoint_callback`.
+
 ## Comparing performance
 To compare the inference performance of different models you can use `src/compare_performance.py`. For example, running the following command tests the inference times of a Linformer with `k=128` with an encoder-only architecture:
 ```bash
