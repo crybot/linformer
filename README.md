@@ -2,7 +2,7 @@
 This repository holds a PyTorch implementation of Linformer (Wang et al., 2020) and offers a comparison against a vanilla Transformer.
 
 # Dataset
-You can the pretokenized dataset from [here](https://huggingface.co/datasets/crybot/WMT14-en-de-tokenized), or you can download the original raw dataset from 
+You can download the pretokenized dataset from [here](https://huggingface.co/datasets/crybot/WMT14-en-de-tokenized), or you can download the original raw dataset from 
 this [Kaggle repository](https://www.kaggle.com/datasets/mohamedlotfy50/wmt-2014-english-german?select=wmt14_translate_de-en_train.csv). For the latter, you need to run the pretokenization phase with:
 
 ```bash
