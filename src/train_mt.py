@@ -76,18 +76,18 @@ def load_config(path: str) -> dict:
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--checkpoint', type=str, help='Path to the checkpoint file')
+    parser.add_argument('--config', type=str, help='Path to the config file')
     return parser.parse_args()
 
-def main():
+def main(args):
     set_random_state(42)
-    args = parse_args()
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    ARTIFACTS_PATH = './HLT/artifacts'
-    config = load_config('./HLT/configs/experiment_config.yaml')
+    ARTIFACTS_PATH = './artifacts'
+    config = load_config(args.config)
 
     tokenizer = AutoTokenizer.from_pretrained(
-            './HLT/models/facebook/bart-base',
+            './models/facebook/bart-base',
             padding_side='right',
             clean_up_tokenization_spaces=True,
             use_fast=False
@@ -101,7 +101,7 @@ def main():
     optimizer = torch.optim.Adam(model.parameters(), lr=config['training']['learning_rate'])
 
     dataset = CSVDataset(
-            './HLT/datasets/wmt14-050-tokenized-256.npz',
+            './datasets/wmt14-050-tokenized-256.npz',
             from_dump=True
             )
 
@@ -157,10 +157,13 @@ def main():
     if args.checkpoint:
         print(f'Checkpoint path provided: {args.checkpoint}')
         print(f'Resuming...')
-        checkpoint = download_wandb_checkpoint(f'HLT/{args.checkpoint}', 'checkpoint.pt', device=device)
+        checkpoint = download_wandb_checkpoint(f'./{args.checkpoint}', 'checkpoint.pt', device=device)
         training_loop.load_state(model, checkpoint)
 
     model = training_loop.run(epochs=epochs)
 
 if __name__ == '__main__':
-    main()
+    args = parse_args()
+    if not args.config:
+        raise ValueError("No config file provided")
+    main(args)

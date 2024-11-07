@@ -72,14 +72,14 @@ def parse_args():
 def main(args):
     max_length = 256
     tokenizer = AutoTokenizer.from_pretrained(
-            './HLT/models/facebook/bart-base',
+            './models/facebook/bart-base',
             padding_side='right',
             clean_up_tokenization_spaces=True,
             use_fast=False
             )
 
     dataset = CSVDataset(
-            './HLT/datasets/wmt14_translate_de-en_test.csv',
+            './datasets/wmt14_translate_de-en_test.csv',
             src_key = 'en',
             tgt_key='de',
             tokenizer=tokenizer,
@@ -91,7 +91,7 @@ def main(args):
 
     print(f'Checkpoint path provided: {args.checkpoint}')
     print(f'Resuming...')
-    model = load_model_from_wandb_checkpoint(f'HLT/{args.checkpoint}', device='cuda')
+    model = load_model_from_wandb_checkpoint(f'./{args.checkpoint}', device='cuda')
 
     run = wandb.init(
             id=args.checkpoint,
@@ -99,7 +99,7 @@ def main(args):
             resume='must',
             reinit=True)
 
-    out_file = os.path.join('./HLT/artifacts', f'{args.checkpoint}_out.csv')
+    out_file = os.path.join('./artifacts', f'{args.checkpoint}_out.csv')
     bleu, ppl = evaluate(model, dataset, tokenizer, out_file)
     wandb.log({'test_bleu': bleu, 'test_perplexity': ppl}, commit=True)
 

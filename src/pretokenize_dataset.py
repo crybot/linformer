@@ -8,7 +8,7 @@ from datasets import CSVDataset
 def main():
     max_length = 256
     tokenizer = AutoTokenizer.from_pretrained(
-            './HLT/models/facebook/bart-base',
+            './models/facebook/bart-base',
             padding_side='right',
             clean_up_tokenization_spaces=True,
             use_fast=False
@@ -16,7 +16,7 @@ def main():
 
     print('Tokenizing dataset')
     dataset = CSVDataset(
-            './HLT/datasets/wmt14_translate_de-en_train.csv',
+            './datasets/wmt14_translate_de-en_train.csv',
             src_key = 'en',
             tgt_key='de',
             tokenizer=tokenizer,
@@ -28,7 +28,7 @@ def main():
     print('Tokenization complete')
     print('Saving dataset dump')
 
-    dataset.save_dump(f'./HLT/datasets/wmt14-050-tokenized-{max_length}')
+    dataset.save_dump(f'./datasets/wmt14-050-tokenized-{max_length}')
 
     print('Dump successfully saved')
 

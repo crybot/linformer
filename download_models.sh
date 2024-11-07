@@ -1,8 +1,8 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 declare -a FILES_LM=(
 # "model.safetensors"
-"pytorch_model.bin"
+# "pytorch_model.bin"
 "config.json"
 "generation_config.json"
 "merges.txt"
@@ -14,12 +14,12 @@ declare -a FILES_LM=(
 )
 
 declare -a MODELS=(
-"openai-community/gpt2"
+# "openai-community/gpt2"
 "facebook/bart-base"
-"facebook/bart-large"
-"facebook/bart-large-cnn"
-"google-bert/bert-large-uncased",
-"google-t5/t5-small"
+# "facebook/bart-large"
+# "facebook/bart-large-cnn"
+# "google-bert/bert-large-uncased",
+# "google-t5/t5-small"
 )
 
 function validate_url(){

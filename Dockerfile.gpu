@@ -1,38 +1,34 @@
-#TODO: JUPYTER arg
-
 FROM nvcr.io/nvidia/pytorch:24.08-py3
 ARG WANDB_SECRET
 RUN apt-get update -y && apt-get install git -y
 RUN pip install pandas numpy pkbar einops jupyterlab pathos
 RUN test -n "$WANDB_SECRET" # makes WANDB_SECRET mandatory for the build
-RUN pip install --upgrade wandb && \
-    wandb login $WANDB_SECRET
+
+RUN pip install --upgrade wandb && wandb login $WANDB_SECRET
 RUN pip install transformers tqdm boto3 requests regex sentencepiece sacremoses
 RUN pip install accelerate
 RUN pip install bitsandbytes
 RUN pip install sacrebleu
 
-
 WORKDIR /root
-RUN mkdir -p ./HLT
 
-COPY ./models ./HLT/models
-COPY ./configs ./HLT/configs
-# COPY ./datasets ./HLT/datasets
+COPY ./models ./models
+COPY ./configs ./configs
+# COPY ./datasets ./datasets
 
 
-COPY ./src ./HLT/src
-RUN mkdir -p ./HLT/artifacts
+COPY ./src ./src
+RUN mkdir -p ./artifacts
 
 ENV TOKENIZERS_PARALLELISM=true
-#
+
 # Allows for already allocated segments to expand in size: this is useful if,
 # as in our usecase, batches frequently change in size (the sequence dimension
 # has variable length across batches due to padding)
 ENV PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-# TODO: generalize task script
-# ENTRYPOINT ["python3", "./HLT/src/train_mt.py"]
-# ENTRYPOINT ["python3", "./HLT/src/evaluate.py"]
-# ENTRYPOINT ["python3", "./HLT/src/compare_performance.py"]
-# ENTRYPOINT ["python3", "./HLT/src/compute_average_length.py"]
+# Set a flexible entrypoint
+ENTRYPOINT ["python3"]
+
+# Set a default script to run in case no argument is given
+CMD ["src/train_mt.py"]

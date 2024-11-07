@@ -21,7 +21,7 @@ def main(args):
     device = 'cuda'
     max_tokens = 256 * 64
     lengths = [2 ** n for n in range(8, 15)] # starting from 256
-    config = load_config(os.path.join('./HLT', args.config))
+    config = load_config(os.path.join('./', args.config))
 
     times = []
 
@@ -45,7 +45,7 @@ def main(args):
             torch.cuda.empty_cache()
 
     output = os.path.splitext(os.path.basename(args.config))[0] + '.csv'
-    output = os.path.join('./HLT/artifacts', output)
+    output = os.path.join('./artifacts', output)
     with open(output, 'w') as f:
         index = [f'{l}/{max_tokens // l}' for l in lengths]
         writer = csv.writer(f)

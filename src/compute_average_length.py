@@ -6,12 +6,12 @@ from time import sleep
 
 def main():
     tokenizer = AutoTokenizer.from_pretrained(
-            './HLT/models/facebook/bart-base',
+            './models/facebook/bart-base',
             clean_up_tokenization_spaces=True,
             use_fast=True
             )
 
-    df = pd.read_csv('./HLT/datasets/wmt14_translate_de-en_train.csv', lineterminator='\n')
+    df = pd.read_csv('./datasets/wmt14_translate_de-en_train.csv', lineterminator='\n')
     src_list = df['en'].tolist()
     tgt_list = df['de'].tolist()
     n = len(src_list)
