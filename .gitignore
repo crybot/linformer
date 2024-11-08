@@ -164,7 +164,7 @@ cython_debug/
 
 /history/
 /models/
-/datasets/
+/datasets/*.npz
 
 # LaTeX
 ## Core latex/pdflatex auxiliary files:
