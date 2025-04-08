@@ -32,7 +32,7 @@ To train a Linformer with `k=32`:
 
 Training logs validation metrics to Weights & Biases and the build script looks for a `~/.wandb_secret` file containing your API key under your home directory by default. You can change this behaviour by editing `build.sh`.
 
-You can also disable Weights & Biases logging altogether by commenting out the callbacks in `src/train_my.py`, but you will not be able to automatically checkpoint the model for later evaluation.
+You can also disable Weights & Biases logging altogether by commenting out the callbacks in `src/train_mt.py`, but you will not be able to automatically checkpoint the model for later evaluation.
 The callbacks to comment out are: `wandb_callback, checkpoint_callback`.
 
 ## Comparing performance
