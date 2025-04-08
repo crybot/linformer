@@ -7,11 +7,12 @@ from datasets import CSVDataset
 
 def main():
     max_length = 256
+    fraction = 0.5
     tokenizer = AutoTokenizer.from_pretrained(
             './models/facebook/bart-base',
             padding_side='right',
             clean_up_tokenization_spaces=True,
-            use_fast=False
+            use_fast=True
             )
 
     print('Tokenizing dataset')
@@ -23,6 +24,7 @@ def main():
             padding='max_length',
             max_length=max_length,
             truncation=True,
+            fraction=fraction,
             device='cpu'
             )
     print('Tokenization complete')

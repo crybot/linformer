@@ -102,7 +102,8 @@ def main(args):
 
     dataset = CSVDataset(
             './datasets/wmt14-050-tokenized-256.npz',
-            from_dump=True
+            from_dump=True,
+            fraction = 1.0
             )
 
     wandb_callback = WandbCallback(

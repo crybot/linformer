@@ -27,6 +27,7 @@ class CSVDataset(Dataset):
             padding: str = 'longest',
             max_length: int = None,
             truncation: bool = False,
+            fraction: float = 1.0,
             device: torch.device = 'cpu'
             ) -> None:
         self.from_dump = from_dump
@@ -34,6 +35,7 @@ class CSVDataset(Dataset):
         self.padding = padding
         self.max_length = max_length
         self.truncation = truncation
+        self.fraction = fraction
         self.device = device
 
         if from_dump:
@@ -42,6 +44,9 @@ class CSVDataset(Dataset):
             df = pd.read_csv(path, lineterminator='\n')
             self.src = df[src_key].tolist()
             self.tgt = df[tgt_key].tolist()
+
+            self.src = self.src[:int(len(self.src)*self.fraction)]
+            self.tgt = self.tgt[:int(len(self.tgt)*self.fraction)]
 
             self.src_masks = []
             self.tgt_masks = []
@@ -125,6 +130,11 @@ class CSVDataset(Dataset):
             self.tgt = torch.from_numpy(nps['tgt'])
             self.src_masks = torch.from_numpy(nps['src_masks'])
             self.tgt_masks = torch.from_numpy(nps['tgt_masks'])
+
+            self.src = self.src[:int(len(self.src)*self.fraction)]
+            self.tgt = self.tgt[:int(len(self.tgt)*self.fraction)]
+            self.src_masks = self.src_masks[:int(len(self.src_masks)*self.fraction)]
+            self.tgt_masks = self.tgt_masks[:int(len(self.tgt_masks)*self.fraction)]
         gc.collect()
 
     def __len__(self) -> int:
